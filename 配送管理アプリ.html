@@ -1,0 +1,2200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>パンフレット配布管理システム | 沖縄</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ocean: #0099cc;
+  --ocean-deep: #005f7f;
+  --ocean-light: #e6f7ff;
+  --coral: #ff6b4a;
+  --coral-light: #fff0ec;
+  --sand: #f5f0e8;
+  --sand-dark: #e8e0cc;
+  --forest: #2d7a4f;
+  --forest-light: #e8f5ee;
+  --amber: #f59e0b;
+  --amber-light: #fffbeb;
+  --slate: #1e293b;
+  --slate-mid: #475569;
+  --slate-light: #94a3b8;
+  --white: #ffffff;
+  --bg: #f0f4f8;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--slate);
+  min-height: 100vh;
+  font-size: 14px;
+}
+
+/* ===== LOGIN ===== */
+#loginScreen {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #005f7f 0%, #0099cc 40%, #00b8d4 70%, #26c6da 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+#loginScreen::before {
+  content: '';
+  position: absolute;
+  bottom: -80px;
+  left: -40px;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+}
+#loginScreen::after {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -80px;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.07);
+}
+.loginCard {
+  background: white;
+  border-radius: 24px;
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  position: relative;
+  z-index: 1;
+}
+.loginLogo {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.loginLogo .wave { font-size: 48px; }
+.loginLogo h1 { font-size: 20px; font-weight: 700; color: var(--slate); margin-top: 12px; }
+.loginLogo p { font-size: 12px; color: var(--slate-light); margin-top: 4px; }
+.loginOptions { display: flex; gap: 12px; margin-bottom: 28px; }
+.loginOption {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+  font-size: 13px;
+  color: var(--slate-mid);
+  transition: all 0.2s;
+  background: white;
+}
+.loginOption.active { border-color: var(--ocean); background: var(--ocean-light); color: var(--ocean-deep); font-weight: 600; }
+.loginOption:hover { border-color: var(--ocean); }
+.pinInput { display: flex; gap: 10px; justify-content: center; margin-bottom: 24px; }
+.pinDigit {
+  width: 52px;
+  height: 60px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  color: var(--ocean-deep);
+  outline: none;
+  transition: all 0.2s;
+  background: var(--bg);
+}
+.pinDigit:focus { border-color: var(--ocean); background: white; box-shadow: 0 0 0 3px rgba(0,153,204,0.15); }
+.staffSelect {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--slate);
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  outline: none;
+  margin-bottom: 20px;
+  transition: border-color 0.2s;
+}
+.staffSelect:focus { border-color: var(--ocean); background: white; }
+.btnLogin {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--ocean-deep), var(--ocean));
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'Noto Sans JP', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.05em;
+}
+.btnLogin:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(0,99,153,0.3); }
+.loginErr { color: var(--coral); font-size: 13px; text-align: center; margin-top: 12px; display: none; }
+
+/* ===== HEADER ===== */
+#app { display: none; }
+.header {
+  background: white;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow);
+}
+.headerLeft { display: flex; align-items: center; gap: 12px; }
+.headerLogo { font-size: 16px; font-weight: 700; color: var(--ocean-deep); }
+.headerUser {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.userBadge {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: white;
+}
+.badge-admin { background: var(--coral); }
+.badge-staff { background: var(--ocean); }
+.btnLogout {
+  padding: 6px 14px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--slate-mid);
+  font-family: 'Noto Sans JP', sans-serif;
+}
+.btnLogout:hover { background: var(--bg); }
+
+/* ===== NAV ===== */
+.nav {
+  background: white;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav::-webkit-scrollbar { display: none; }
+.navItem {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate-mid);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.navItem:hover { color: var(--ocean); }
+.navItem.active { color: var(--ocean-deep); border-bottom-color: var(--ocean); font-weight: 600; }
+
+/* ===== MAIN ===== */
+.main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+.pageTitle { font-size: 22px; font-weight: 700; margin-bottom: 20px; color: var(--slate); }
+
+/* ===== CARDS ===== */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  border: 1px solid var(--border);
+}
+.cardTitle { font-size: 15px; font-weight: 700; color: var(--slate); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+/* ===== STATS ===== */
+.statsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.statCard {
+  background: white;
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.statLabel { font-size: 12px; color: var(--slate-light); font-weight: 500; margin-bottom: 8px; }
+.statValue { font-size: 32px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--slate); }
+.statSub { font-size: 12px; color: var(--slate-light); margin-top: 4px; }
+.statCard.ocean .statValue { color: var(--ocean-deep); }
+.statCard.coral .statValue { color: var(--coral); }
+.statCard.forest .statValue { color: var(--forest); }
+.statCard.amber .statValue { color: var(--amber); }
+
+/* ===== TABLE ===== */
+.tableWrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--bg); padding: 10px 14px; text-align: left; font-weight: 600; color: var(--slate-mid); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg); }
+
+/* ===== BADGES ===== */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-done { background: var(--forest-light); color: var(--forest); }
+.badge-pending { background: var(--coral-light); color: var(--coral); }
+.badge-skip { background: var(--sand); color: var(--slate-mid); }
+.badge-area1 { background: #e0f2fe; color: #0369a1; }
+.badge-area2 { background: #fef3c7; color: #92400e; }
+.badge-area3 { background: #f0fdf4; color: #166534; }
+.badge-area4 { background: #fdf4ff; color: #7e22ce; }
+.badge-area5 { background: #fff1f2; color: #be123c; }
+
+/* ===== BUTTONS ===== */
+.btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  font-family: 'Noto Sans JP', sans-serif;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary { background: var(--ocean); color: white; }
+.btn-primary:hover { background: var(--ocean-deep); }
+.btn-coral { background: var(--coral); color: white; }
+.btn-coral:hover { opacity: 0.9; }
+.btn-forest { background: var(--forest); color: white; }
+.btn-forest:hover { opacity: 0.9; }
+.btn-outline { background: white; color: var(--slate); border: 1px solid var(--border); }
+.btn-outline:hover { background: var(--bg); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-lg { padding: 12px 24px; font-size: 15px; }
+
+/* ===== FORMS ===== */
+.formGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.formGroup { display: flex; flex-direction: column; gap: 6px; }
+.formLabel { font-size: 12px; font-weight: 600; color: var(--slate-mid); }
+.formInput, .formSelect {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: 'Noto Sans JP', sans-serif;
+  color: var(--slate);
+  background: white;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.formInput:focus, .formSelect:focus { border-color: var(--ocean); }
+
+/* ===== AREA FILTER ===== */
+.areaFilters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.areaBtn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+.areaBtn-all { background: var(--slate); color: white; }
+.areaBtn-1 { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
+.areaBtn-2 { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.areaBtn-3 { background: #f0fdf4; color: #166534; border-color: #86efac; }
+.areaBtn-4 { background: #fdf4ff; color: #7e22ce; border-color: #d8b4fe; }
+.areaBtn-5 { background: #fff1f2; color: #be123c; border-color: #fda4af; }
+.areaBtn.active { box-shadow: 0 2px 8px rgba(0,0,0,0.15); transform: translateY(-1px); }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  display: none;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: white;
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+.modal-header {
+  padding: 20px 24px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: white;
+  padding-top: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--slate-light); padding: 4px; }
+.modal-body { padding: 20px 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ===== UPLOAD AREA ===== */
+.uploadArea {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg);
+}
+.uploadArea:hover { border-color: var(--ocean); background: var(--ocean-light); }
+.uploadArea .icon { font-size: 32px; margin-bottom: 8px; }
+.uploadArea p { font-size: 13px; color: var(--slate-mid); }
+.photoGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.photoThumb {
+  aspect-ratio: 1;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--slate-light);
+}
+.photoThumb img { width: 100%; height: 100%; object-fit: cover; }
+.photoThumb .del { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+/* ===== PROGRESS BAR ===== */
+.progressBar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+.progressFill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+.progress-ocean { background: linear-gradient(90deg, var(--ocean-deep), var(--ocean)); }
+.progress-forest { background: linear-gradient(90deg, #166534, var(--forest)); }
+.progress-coral { background: linear-gradient(90deg, #be123c, var(--coral)); }
+
+/* ===== FACILITY CARD (mobile) ===== */
+.facilityList { display: flex; flex-direction: column; gap: 10px; }
+.facilityCard {
+  background: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transition: all 0.2s;
+}
+.facilityCard:hover { box-shadow: var(--shadow-lg); }
+.facilityCard.done { border-left: 4px solid var(--forest); }
+.facilityCard.pending { border-left: 4px solid var(--coral); }
+.facilityCard.skip { border-left: 4px solid var(--sand-dark); opacity: 0.7; }
+.fcTop { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.fcName { font-weight: 700; font-size: 14px; color: var(--slate); }
+.fcMeta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.fcTag { font-size: 11px; color: var(--slate-light); display: flex; align-items: center; gap: 4px; }
+.fcActions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+/* ===== SCHEDULE CALENDAR ===== */
+.calGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calDay { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; border: 1px solid transparent; }
+.calDay.today { background: var(--ocean); color: white; }
+.calDay.hasSchedule { background: var(--ocean-light); color: var(--ocean-deep); border-color: var(--ocean); font-weight: 700; }
+.calDay.available { background: var(--forest-light); color: var(--forest); }
+.calDay.unavailable { background: var(--coral-light); color: var(--coral); }
+.calDay:hover:not(.today) { background: var(--bg); }
+.calHeader { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; }
+.calDayLabel { text-align: center; font-size: 11px; font-weight: 600; color: var(--slate-light); }
+
+/* ===== MAP ROUTE ===== */
+.routeList { display: flex; flex-direction: column; gap: 0; }
+.routeItem { display: flex; gap: 12px; align-items: flex-start; }
+.routeLine { display: flex; flex-direction: column; align-items: center; }
+.routeDot { width: 12px; height: 12px; border-radius: 50%; background: var(--ocean); border: 2px solid white; box-shadow: 0 0 0 2px var(--ocean); flex-shrink: 0; margin-top: 3px; }
+.routeConnector { width: 2px; flex: 1; background: var(--border); min-height: 20px; }
+.routeInfo { padding-bottom: 16px; flex: 1; }
+.routeName { font-weight: 600; font-size: 13px; color: var(--slate); }
+.routeAddr { font-size: 11px; color: var(--slate-light); margin-top: 2px; }
+
+/* ===== NOTIFICATION ===== */
+.notifBell { position: relative; }
+.notifCount {
+  position: absolute; top: -6px; right: -6px;
+  background: var(--coral); color: white;
+  border-radius: 50%; width: 18px; height: 18px;
+  font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.notifList { display: flex; flex-direction: column; gap: 8px; }
+.notifItem { padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
+.notifItem.unread { background: var(--ocean-light); border-color: var(--ocean); }
+
+/* ===== REPORT ===== */
+.reportSection { margin-bottom: 24px; }
+.reportSection h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+/* ===== TABS ===== */
+.tabs { display: flex; gap: 2px; background: var(--bg); border-radius: var(--radius-sm); padding: 4px; margin-bottom: 20px; }
+.tab { flex: 1; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; text-align: center; cursor: pointer; color: var(--slate-mid); transition: all 0.2s; }
+.tab.active { background: white; color: var(--ocean-deep); box-shadow: var(--shadow); }
+
+/* ===== STAFF CARD ===== */
+.staffGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.staffCard {
+  background: white;
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.staffAvatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px; }
+.staffName { font-weight: 700; font-size: 15px; color: var(--slate); }
+.staffMeta { font-size: 12px; color: var(--slate-light); margin-top: 4px; }
+.staffStatus { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; }
+.statusDot { width: 8px; height: 8px; border-radius: 50%; }
+.statusDot.online { background: var(--forest); }
+.statusDot.offline { background: var(--slate-light); }
+
+/* ===== GENRE TABS ===== */
+.genreTabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.genreTab { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: white; color: var(--slate-mid); transition: all 0.2s; }
+.genreTab.active { background: var(--ocean); color: white; border-color: var(--ocean); }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 640px) {
+  .main { padding: 12px; }
+  .statsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .statValue { font-size: 24px; }
+  .formGrid { grid-template-columns: 1fr; }
+  .loginCard { padding: 32px 24px; }
+  .header { padding: 0 12px; }
+  .headerLogo { font-size: 14px; }
+}
+
+/* ===== PAGE SECTIONS ===== */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ===== SEARCH ===== */
+.searchBar { position: relative; margin-bottom: 16px; }
+.searchBar input { width: 100%; padding: 10px 14px 10px 40px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'Noto Sans JP', sans-serif; outline: none; background: white; transition: border-color 0.2s; }
+.searchBar input:focus { border-color: var(--ocean); }
+.searchBar .icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--slate-light); }
+
+.twoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .twoCol { grid-template-columns: 1fr; } }
+
+.separator { height: 1px; background: var(--border); margin: 16px 0; }
+.sectionNote { font-size: 12px; color: var(--slate-light); margin-bottom: 12px; }
+.infoRow { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.infoRow:last-child { border-bottom: none; }
+.infoLabel { color: var(--slate-mid); font-weight: 500; }
+.infoVal { font-weight: 600; color: var(--slate); }
+
+.alert { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 16px; }
+.alert-info { background: var(--ocean-light); color: var(--ocean-deep); border: 1px solid #7dd3fc; }
+.alert-warn { background: var(--amber-light); color: #92400e; border: 1px solid #fcd34d; }
+
+input[type=file] { display: none; }
+.fileLabel { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; color: var(--slate-mid); background: white; transition: all 0.2s; }
+.fileLabel:hover { border-color: var(--ocean); color: var(--ocean); }
+
+.meterPhoto { border-radius: var(--radius-sm); border: 1px solid var(--border); padding: 12px; background: var(--bg); }
+.meterPhoto .label { font-size: 11px; font-weight: 600; color: var(--slate-mid); margin-bottom: 8px; }
+
+.completeCheckAnim {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--forest); color: white; font-size: 14px;
+  animation: popIn 0.3s ease;
+}
+@keyframes popIn { 0%{transform:scale(0)} 80%{transform:scale(1.2)} 100%{transform:scale(1)} }
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div id="loginScreen">
+  <div class="loginCard">
+    <div class="loginLogo">
+      <div class="wave">🌊</div>
+      <h1>パンフレット配布管理</h1>
+      <p>沖縄本島 施設巡回システム</p>
+    </div>
+    <div class="loginOptions">
+      <div class="loginOption active" id="optAdmin" onclick="setLoginType('admin')">🔑 管理者</div>
+      <div class="loginOption" id="optStaff" onclick="setLoginType('staff')">👤 担当者</div>
+    </div>
+    <div id="staffSelectWrap" style="display:none;">
+      <select class="staffSelect" id="staffPicker">
+        <option value="">担当者を選択してください</option>
+      </select>
+    </div>
+    <div class="pinInput">
+      <input class="pinDigit" type="password" maxlength="1" id="p1" inputmode="numeric">
+      <input class="pinDigit" type="password" maxlength="1" id="p2" inputmode="numeric">
+      <input class="pinDigit" type="password" maxlength="1" id="p3" inputmode="numeric">
+      <input class="pinDigit" type="password" maxlength="1" id="p4" inputmode="numeric">
+    </div>
+    <button class="btnLogin" onclick="doLogin()">ログイン</button>
+    <p class="loginErr" id="loginErr">PINコードが違います</p>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="app">
+  <div class="header">
+    <div class="headerLeft">
+      <span class="headerLogo">🌊 配布管理</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="headerUser">
+        <div class="userBadge" id="userBadge">A</div>
+        <span id="userNameDisp">管理者</span>
+      </div>
+      <button class="btnLogout" onclick="doLogout()">ログアウト</button>
+    </div>
+  </div>
+
+  <nav class="nav" id="mainNav"></nav>
+
+  <div class="main">
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="pageTitle">📊 ダッシュボード</div>
+      <div class="statsGrid" id="dashStats"></div>
+      <div class="twoCol">
+        <div class="card">
+          <div class="cardTitle">📋 エリア別進捗</div>
+          <div id="areaProgress"></div>
+        </div>
+        <div class="card">
+          <div class="cardTitle">🔔 最近の通知</div>
+          <div class="notifList" id="notifList"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px;">
+        <div class="cardTitle">📅 本日のスケジュール</div>
+        <div id="todaySchedule"></div>
+      </div>
+    </div>
+
+    <!-- FACILITIES -->
+    <div class="page" id="page-facilities">
+      <div class="pageTitle">🏨 施設一覧</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <div class="searchBar" style="flex:1;min-width:200px;margin-bottom:0;">
+            <span class="icon">🔍</span>
+            <input type="text" id="facilSearch" placeholder="施設名・住所で検索..." oninput="renderFacilities()">
+          </div>
+          <div class="genreTabs" style="margin-bottom:0;" id="genreTabs"></div>
+          <button class="btn btn-primary btn-sm" onclick="openAddFacility()">＋ 施設追加</button>
+        </div>
+        <div class="areaFilters" style="margin-top:12px;margin-bottom:0;" id="areaFilterBtns"></div>
+      </div>
+      <div id="facilitiesContainer"></div>
+    </div>
+
+    <!-- DELIVERY (Staff) -->
+    <div class="page" id="page-delivery">
+      <div class="pageTitle">🚗 本日の配達</div>
+      <div id="deliveryContent"></div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div class="page" id="page-schedule">
+      <div class="pageTitle">📅 スケジュール管理</div>
+      <div id="scheduleContent"></div>
+    </div>
+
+    <!-- STAFF ADMIN -->
+    <div class="page" id="page-staff">
+      <div class="pageTitle">👥 担当者管理</div>
+      <div style="margin-bottom:16px;display:flex;justify-content:flex-end;">
+        <button class="btn btn-primary" onclick="openAddStaff()">＋ 担当者追加</button>
+      </div>
+      <div class="staffGrid" id="staffGrid"></div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="page" id="page-reports">
+      <div class="pageTitle">📄 日報・レポート</div>
+      <div id="reportsContent"></div>
+    </div>
+
+    <!-- ROUTE -->
+    <div class="page" id="page-route">
+      <div class="pageTitle">🗺️ 巡回ルート</div>
+      <div id="routeContent"></div>
+    </div>
+
+    <!-- AVAILABILITY (Staff) -->
+    <div class="page" id="page-availability">
+      <div class="pageTitle">📆 出勤可能日</div>
+      <div id="availContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+<div class="modal-overlay" id="facilityModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="facilityModalTitle">施設登録</div>
+      <button class="modal-close" onclick="closeModal('facilityModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="formGrid">
+        <div class="formGroup"><label class="formLabel">施設名 *</label><input class="formInput" id="fac_name" placeholder="ホテル名"></div>
+        <div class="formGroup"><label class="formLabel">ジャンル</label>
+          <select class="formSelect" id="fac_genre">
+            <option value="hotel">ホテル</option>
+            <option value="rental">レンタカー</option>
+            <option value="michi">道の駅・観光地</option>
+            <option value="other">その他</option>
+          </select>
+        </div>
+        <div class="formGroup"><label class="formLabel">地域1</label><input class="formInput" id="fac_area1" placeholder="那覇"></div>
+        <div class="formGroup"><label class="formLabel">地域2</label><input class="formInput" id="fac_area2" placeholder="おもろまち"></div>
+        <div class="formGroup" style="grid-column:1/-1"><label class="formLabel">住所</label><input class="formInput" id="fac_address" placeholder="那覇市○○1-2-3"></div>
+        <div class="formGroup"><label class="formLabel">電話番号</label><input class="formInput" id="fac_tel" placeholder="098-xxx-xxxx"></div>
+        <div class="formGroup"><label class="formLabel">エリア区分</label>
+          <select class="formSelect" id="fac_zone">
+            <option value="1">エリア1 (那覇市)</option>
+            <option value="2">エリア2 (南部)</option>
+            <option value="3">エリア3 (中部)</option>
+            <option value="4">エリア4 (北部・恩納)</option>
+            <option value="5">エリア5 (名護・本部)</option>
+          </select>
+        </div>
+        <div class="formGroup"><label class="formLabel">設置タイプ</label>
+          <select class="formSelect" id="fac_rack">
+            <option value="ラック">ラック</option>
+            <option value="手渡し">手渡し</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('facilityModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveFacility()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="staffModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">担当者登録・編集</div>
+      <button class="modal-close" onclick="closeModal('staffModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="formGrid">
+        <div class="formGroup"><label class="formLabel">氏名 *</label><input class="formInput" id="st_name" placeholder="山田 太郎"></div>
+        <div class="formGroup"><label class="formLabel">PINコード (4桁)</label><input class="formInput" id="st_pin" type="password" maxlength="4" placeholder="****" inputmode="numeric"></div>
+        <div class="formGroup"><label class="formLabel">車両ナンバー</label><input class="formInput" id="st_car" placeholder="沖縄 300 あ 1234"></div>
+        <div class="formGroup"><label class="formLabel">燃費 (km/L)</label><input class="formInput" id="st_fuel" type="number" placeholder="15.0"></div>
+        <div class="formGroup"><label class="formLabel">担当エリア</label>
+          <select class="formSelect" id="st_zone">
+            <option value="1">エリア1 (那覇市)</option>
+            <option value="2">エリア2 (南部)</option>
+            <option value="3">エリア3 (中部)</option>
+            <option value="4">エリア4 (北部・恩納)</option>
+            <option value="5">エリア5 (名護・本部)</option>
+            <option value="">未割り当て</option>
+          </select>
+        </div>
+        <div class="formGroup"><label class="formLabel">絵文字アイコン</label><input class="formInput" id="st_emoji" placeholder="🧑" maxlength="2"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('staffModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveStaff()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="checkInModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="checkInTitle">施設報告</div>
+      <button class="modal-close" onclick="closeModal('checkInModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="formGroup" style="margin-bottom:16px;">
+        <label class="formLabel">補充状況</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn btn-forest btn-sm" onclick="setStatus('done')">✅ 補充完了</button>
+          <button class="btn btn-outline btn-sm" onclick="setStatus('skip')">⏭️ 補充不要</button>
+          <button class="btn btn-coral btn-sm" onclick="setStatus('pending')">❌ 未完了</button>
+        </div>
+        <div id="statusSelected" style="margin-top:8px;font-size:13px;color:var(--slate-mid);">未選択</div>
+      </div>
+      <div class="formGroup" style="margin-bottom:16px;">
+        <label class="formLabel">メモ</label>
+        <textarea class="formInput" id="checkInNote" rows="2" style="resize:vertical;" placeholder="特記事項があれば入力..."></textarea>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div class="formLabel" style="margin-bottom:8px;">📸 ラック写真</div>
+        <label class="fileLabel" for="rackPhotoInput">📷 写真を追加</label>
+        <input type="file" id="rackPhotoInput" accept="image/*" multiple onchange="addPhoto(this,'rackPhotos')">
+        <div class="photoGrid" id="rackPhotos"></div>
+      </div>
+      <div>
+        <div class="formLabel" style="margin-bottom:8px;">🧾 領収書</div>
+        <label class="fileLabel" for="receiptInput">📷 領収書を追加</label>
+        <input type="file" id="receiptInput" accept="image/*" multiple onchange="addPhoto(this,'receiptPhotos')">
+        <div class="photoGrid" id="receiptPhotos"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('checkInModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveCheckIn()">報告を保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="scheduleModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">配達指示を送る</div>
+      <button class="modal-close" onclick="closeModal('scheduleModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="formGrid">
+        <div class="formGroup"><label class="formLabel">配達日</label><input class="formInput" type="date" id="sch_date"></div>
+        <div class="formGroup"><label class="formLabel">担当者</label>
+          <select class="formSelect" id="sch_staff"></select>
+        </div>
+        <div class="formGroup"><label class="formLabel">エリア</label>
+          <select class="formSelect" id="sch_zone">
+            <option value="1">エリア1 (那覇市)</option>
+            <option value="2">エリア2 (南部)</option>
+            <option value="3">エリア3 (中部)</option>
+            <option value="4">エリア4 (北部・恩納)</option>
+            <option value="5">エリア5 (名護・本部)</option>
+          </select>
+        </div>
+        <div class="formGroup"><label class="formLabel">メモ</label><input class="formInput" id="sch_note" placeholder="特記事項"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('scheduleModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSchedule()">指示を送る</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="startDeliveryModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🚗 配達開始</div>
+      <button class="modal-close" onclick="closeModal('startDeliveryModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="meterPhoto" style="margin-bottom:16px;">
+        <div class="label">📸 開始メーター写真</div>
+        <label class="fileLabel" for="meterStartInput">📷 メーター写真を追加</label>
+        <input type="file" id="meterStartInput" accept="image/*" onchange="addPhoto(this,'meterStartPhotos')">
+        <div class="photoGrid" id="meterStartPhotos"></div>
+      </div>
+      <div class="formGroup" style="margin-bottom:16px;">
+        <label class="formLabel">開始時のメーター数値 (km)</label>
+        <input class="formInput" type="number" id="startKm" placeholder="123456">
+      </div>
+      <div class="formGroup">
+        <label class="formLabel">出発時刻</label>
+        <input class="formInput" type="time" id="startTime">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('startDeliveryModal')">キャンセル</button>
+      <button class="btn btn-forest btn-lg" onclick="startDelivery()">出発する 🚗</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="endDeliveryModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🏁 配達終了</div>
+      <button class="modal-close" onclick="closeModal('endDeliveryModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="meterPhoto" style="margin-bottom:16px;">
+        <div class="label">📸 終了メーター写真</div>
+        <label class="fileLabel" for="meterEndInput">📷 メーター写真を追加</label>
+        <input type="file" id="meterEndInput" accept="image/*" onchange="addPhoto(this,'meterEndPhotos')">
+        <div class="photoGrid" id="meterEndPhotos"></div>
+      </div>
+      <div class="formGroup" style="margin-bottom:16px;">
+        <label class="formLabel">終了時のメーター数値 (km)</label>
+        <input class="formInput" type="number" id="endKm" placeholder="123600">
+      </div>
+      <div class="formGroup" style="margin-bottom:16px;">
+        <label class="formLabel">終了時刻</label>
+        <input class="formInput" type="time" id="endTime">
+      </div>
+      <div class="formGroup">
+        <label class="formLabel">🧾 駐車場・高速領収書</label>
+        <label class="fileLabel" for="tollInput">📷 領収書を追加</label>
+        <input type="file" id="tollInput" accept="image/*" multiple onchange="addPhoto(this,'tollPhotos')">
+        <div class="photoGrid" id="tollPhotos"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('endDeliveryModal')">キャンセル</button>
+      <button class="btn btn-coral btn-lg" onclick="endDelivery()">配達完了 🏁</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+const FUEL_PRICE = 170; // 円/L
+
+const AREA_NAMES = {
+  '1': 'エリア1 那覇市',
+  '2': 'エリア2 南部',
+  '3': 'エリア3 中部',
+  '4': 'エリア4 北部・恩納',
+  '5': 'エリア5 名護・本部'
+};
+
+function getAreaZone(area1, area2) {
+  const a1 = (area1||'').toString();
+  const a2 = (area2||'').toString();
+  if (['那覇'].includes(a1)) return '1';
+  if (['豊見城','糸満','南部','南城市','与那原'].includes(a1) || a1==='豊見城') return '2';
+  if (['浦添','宜野湾','沖縄','中頭郡','中部','嘉手納'].includes(a1)) return '3';
+  if (a1==='国頭' && ['恩納','宜野座'].includes(a2)) return '4';
+  if (['名護','国頭'].includes(a1)) return '5';
+  return '1';
+}
+
+// Initial facility data from Excel
+const INITIAL_FACILITIES = [
+  {id:'h001',name:'GRGホテル',genre:'hotel',area1:'那覇',area2:'赤嶺',address:'',tel:'',rack:'ラック',zone:'1'},
+  {id:'h002',name:'ホテルグランビュー沖縄',genre:'hotel',area1:'那覇',area2:'赤嶺',address:'那覇市赤嶺2-3-2',tel:'098-859-4890',rack:'ラック',zone:'1'},
+  {id:'h003',name:'チャビラホテル那覇',genre:'hotel',area1:'那覇',area2:'金城',address:'那覇市金城5-5-11-1',tel:'098-840-1000',rack:'ラック',zone:'1'},
+  {id:'h004',name:'ワイズイン那覇小禄駅前',genre:'hotel',area1:'那覇',area2:'金城',address:'那覇市金城5-9-1',tel:'098-859-7029',rack:'ラック',zone:'1'},
+  {id:'h005',name:'ホテルパークスタジアム那覇',genre:'hotel',area1:'那覇',area2:'山下町',address:'那覇市山下町10-2',tel:'098-859-9000',rack:'ラック',zone:'1'},
+  {id:'h006',name:'HOTEL OROX（ホテルオロックス）',genre:'hotel',area1:'那覇',area2:'小禄',address:'那覇市小禄1-1-1',tel:'098-851-3712',rack:'ラック',zone:'1'},
+  {id:'h007',name:'東急ステイ沖縄那覇',genre:'hotel',area1:'那覇',area2:'壺川',address:'那覇市壺川3-2-1',tel:'098-833-1090',rack:'ラック',zone:'1'},
+  {id:'h008',name:'メルキュールホテル沖縄那覇',genre:'hotel',area1:'那覇',area2:'壺川',address:'那覇市壺川3-3−19',tel:'098-855-7111',rack:'ラック',zone:'1'},
+  {id:'h009',name:'ダイワロイネットホテル那覇おもろまちＰＲＥＭＩＥＲ',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち4-2-2-13',tel:'098-862-5055',rack:'ラック',zone:'1'},
+  {id:'h010',name:'ダイワロイネットホテル那覇おもろまち',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち1-1-12',tel:'098-862-4555',rack:'ラック',zone:'1'},
+  {id:'h011',name:'東横INN那覇おもろまち駅前',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち1-6-6',tel:'098-862-1045',rack:'ラック',zone:'1'},
+  {id:'h012',name:'東横INN那覇新都心おもろまち',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち1-2-27',tel:'098-863-1045',rack:'ラック',zone:'1'},
+  {id:'h013',name:'NAHA新都心HOTEL',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち1-2-25',tel:'098-894-8558',rack:'ラック',zone:'1'},
+  {id:'h014',name:'アルモントホテル那覇おもろまち',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち4-3-8',tel:'098-860-6611',rack:'ラック',zone:'1'},
+  {id:'h015',name:'リブレガーデンホテル',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち4-17-27',tel:'098-869-3333',rack:'ラック',zone:'1'},
+  {id:'h016',name:'スーパーホテル那覇・新都心',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち4-16-27',tel:'098-861-9000',rack:'ラック',zone:'1'},
+  {id:'h017',name:'ザ・ナハテラス',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち2-14-1',tel:'098-864-1111',rack:'ラック',zone:'1'},
+  {id:'h018',name:'ホテルストーク 那覇新都心',genre:'hotel',area1:'那覇',area2:'おもろまち',address:'那覇市おもろまち2-6-40',tel:'098-941-2920',rack:'ラック',zone:'1'},
+  {id:'h019',name:'沖縄サンプラザホテル',genre:'hotel',area1:'那覇',area2:'安里',address:'那覇市安里138',tel:'098-866-0920',rack:'ラック',zone:'1'},
+  {id:'h020',name:'ヒューイットリゾート那覇',genre:'hotel',area1:'那覇',area2:'安里',address:'那覇市安里2-5-16',tel:'098-943-8325',rack:'ラック',zone:'1'},
+  {id:'h021',name:'ホテル オーシャン那覇国際通り',genre:'hotel',area1:'那覇',area2:'安里',address:'那覇市安里2-4-8',tel:'098-863-2288',rack:'ラック',zone:'1'},
+  {id:'h022',name:'ホテル サン・クイーン',genre:'hotel',area1:'那覇',area2:'安里',address:'那覇市安里2-4-2-1',tel:'098-869-6600',rack:'ラック',zone:'1'},
+  {id:'h023',name:'ダイワロイネットホテル那覇国際通り',genre:'hotel',area1:'那覇',area2:'安里',address:'那覇市安里2-1-1',tel:'098-868-9055',rack:'ラック',zone:'1'},
+  {id:'h024',name:'南西観光ホテル',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志3-13-23',tel:'098-862-7144',rack:'ラック',zone:'1'},
+  {id:'h025',name:'アベストＣＵＢＥ那覇国際通り',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志3-13-17',tel:'098-861-9900',rack:'ラック',zone:'1'},
+  {id:'h026',name:'ホテルパームロイヤルNAHA',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志3-9-10',tel:'098-865-5551',rack:'ラック',zone:'1'},
+  {id:'h027',name:'ハイアット リージェンシー 那覇 沖縄',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志3-6-20',tel:'098-866-8888',rack:'ラック',zone:'1'},
+  {id:'h028',name:'ホテルアザット　那覇',genre:'hotel',area1:'那覇',area2:'安里',address:'那覇市安里2-8-8',tel:'098-863-0888',rack:'ラック',zone:'1'},
+  {id:'h029',name:'オリオンホテル那覇',genre:'hotel',area1:'那覇',area2:'安里',address:'那覇市安里1-2-21',tel:'098-866-6578',rack:'ラック',zone:'1'},
+  {id:'h030',name:'沖縄逸の彩ホテル',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志3-18-33',tel:'098-863-8877',rack:'ラック',zone:'1'},
+  {id:'h031',name:'JR九州ホテル ブラッサム那覇',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志2-16-1',tel:'098-861-87001',rack:'ラック',zone:'1'},
+  {id:'h032',name:'ホテルWBFアートステイ那覇',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志1-3-43',tel:'098-861-7070',rack:'ラック',zone:'1'},
+  {id:'h033',name:'ホテル ストレータ 那覇',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志1-19-8',tel:'098-860-7400',rack:'ラック',zone:'1'},
+  {id:'h034',name:'東横INN那覇国際通り美栄橋駅',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志1-20-1',tel:'098-867-1045',rack:'ラック',zone:'1'},
+  {id:'h035',name:'エナジックホテル山市',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志2-16-36',tel:'098-866-5421',rack:'ラック',zone:'1'},
+  {id:'h036',name:'ネストホテル那覇久茂地',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地2-22-5',tel:'098-975-7385',rack:'ラック',zone:'1'},
+  {id:'h037',name:'リッチモンドホテル那覇久茂地',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地2-23-12',tel:'098-869-0077',rack:'ラック',zone:'1'},
+  {id:'h038',name:'ホテル山の内',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志1-3-55',tel:'098-862-5301',rack:'ラック',zone:'1'},
+  {id:'h039',name:'シーサー・イン那覇',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志1-3-59',tel:'098-861-4311',rack:'ラック',zone:'1'},
+  {id:'h040',name:'ホテルJALシティ那覇',genre:'hotel',area1:'那覇',area2:'牧志',address:'那覇市牧志1-3−70',tel:'098-866-2580',rack:'ラック',zone:'1'},
+  {id:'h041',name:'ホテルランタナ那覇国際通り',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾2-8-1',tel:'098-862-3211',rack:'ラック',zone:'1'},
+  {id:'h042',name:'ホテル コレクティブ',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾2-5-7',tel:'098-860-8366',rack:'ラック',zone:'1'},
+  {id:'h043',name:'かりゆしコンドミニアムリゾート那覇　龍神ホテル浮島',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾2-5-36',tel:'098-967-7112',rack:'ラック',zone:'1'},
+  {id:'h044',name:'国際タウンズイン',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾2-12-7',tel:'098-860-1236',rack:'ラック',zone:'1'},
+  {id:'h045',name:'プリンススマートイン那覇',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾2-4-13',tel:'',rack:'ラック',zone:'1'},
+  {id:'h046',name:'Southwest Grand Hotel',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地3-29-52',tel:'098-860-0421',rack:'ラック',zone:'1'},
+  {id:'h047',name:'ホテル国際プラザ',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾1-4-10',tel:'098-862-4243',rack:'ラック',zone:'1'},
+  {id:'h048',name:'HOTEL　NAHA　CITY kokusai',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾1-4-5',tel:'',rack:'ラック',zone:'1'},
+  {id:'h049',name:'ホテルグレイスリー那覇',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾1-3-6',tel:'098-867-6111',rack:'ラック',zone:'1'},
+  {id:'h050',name:'ホテルアベスト那覇国際通り',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地3-1−10',tel:'098-943-5800',rack:'ラック',zone:'1'},
+  {id:'h051',name:'ホテルロコアナハ',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾 1-1-2',tel:'098-868-6578',rack:'ラック',zone:'1'},
+  {id:'h052',name:'ホテルグランコンソルト那覇',genre:'hotel',area1:'那覇',area2:'松尾',address:'那覇市松尾1-18-25',tel:'098-860-5577',rack:'ラック',zone:'1'},
+  {id:'h053',name:'CABIN & HOTEL CONSTANT NAHA',genre:'hotel',area1:'那覇',area2:'壺屋',address:'那覇市壺屋1-1-3',tel:'098-869-0701',rack:'ラック',zone:'1'},
+  {id:'h054',name:'アルモントホテル那覇県庁前',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地1-3-5',tel:'098-866-3811',rack:'ラック',zone:'1'},
+  {id:'h055',name:'コンフォートホテル那覇県庁前',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地1-3-11',tel:'098-941-7311',rack:'ラック',zone:'1'},
+  {id:'h056',name:'LCH.Izumizaki 県庁前',genre:'hotel',area1:'那覇',area2:'泉崎',address:'那覇市泉崎1-11-8',tel:'098-866-1200',rack:'ラック',zone:'1'},
+  {id:'h057',name:'沖縄かりゆしリゾートEXES那覇',genre:'hotel',area1:'那覇',area2:'泉崎',address:'沖縄県那覇市泉崎1‐11‐5',tel:'098-860-3300',rack:'ラック',zone:'1'},
+  {id:'h058',name:'ダイワロイネットホテル沖縄県庁前',genre:'hotel',area1:'那覇',area2:'泉崎',address:'那覇市泉崎1-11-2',tel:'098-860-1855',rack:'ラック',zone:'1'},
+  {id:'h059',name:'ホテルサン沖縄',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地1-5−15',tel:'098-866-1111',rack:'ラック',zone:'1'},
+  {id:'h060',name:'ホテルエアウェイ',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地2-14-5',tel:'098-864-05115',rack:'ラック',zone:'1'},
+  {id:'h061',name:'ホテルサンパレス球陽館',genre:'hotel',area1:'那覇',area2:'久茂地',address:'那覇市久茂地2-5-1',tel:'098-863-4181',rack:'ラック',zone:'1'},
+  {id:'h062',name:'沖縄ハーバービューホテル',genre:'hotel',area1:'那覇',area2:'泉崎',address:'那覇市泉崎2-46',tel:'098-853-2111',rack:'ラック',zone:'1'},
+  {id:'h063',name:'リーガロイヤルグラン沖縄',genre:'hotel',area1:'那覇',area2:'旭町',address:'那覇市旭町1-9',tel:'098-867-3331',rack:'ラック',zone:'1'},
+  {id:'h064',name:'那覇 東急REIホテル',genre:'hotel',area1:'那覇',area2:'旭町',address:'那覇市旭町116-37',tel:'098-869-0109',rack:'ラック',zone:'1'},
+  {id:'h065',name:'ホテルリソルトリニティ那覇',genre:'hotel',area1:'那覇',area2:'旭町',address:'那覇市旭町7',tel:'098-863-9269',rack:'ラック',zone:'1'},
+  {id:'h066',name:'ダブルツリーbyヒルトン那覇',genre:'hotel',area1:'那覇',area2:'東町',address:'那覇市東町3-15',tel:'098-862-0123',rack:'ラック',zone:'1'},
+  {id:'h067',name:'ホテル ユクエスタ旭橋',genre:'hotel',area1:'那覇',area2:'東町',address:'那覇市東町5-19',tel:'098-866-0600',rack:'ラック',zone:'1'},
+  {id:'h068',name:'東横INN那覇旭橋駅前',genre:'hotel',area1:'那覇',area2:'久米',address:'那覇市久米2-1-20',tel:'098-951-1045',rack:'ラック',zone:'1'},
+  {id:'h069',name:'沖縄ナハナ・ホテル＆スパ',genre:'hotel',area1:'那覇',area2:'久米',address:'那覇市久米2-1-5',tel:'098-866-0787',rack:'ラック',zone:'1'},
+  {id:'h070',name:'PROSTYLE旅館 那覇県庁前',genre:'hotel',area1:'那覇',area2:'久米',address:'那覇市久米2-2-1',tel:'098-917-1629',rack:'ラック',zone:'1'},
+  {id:'h071',name:'スマイルホテル沖縄那覇',genre:'hotel',area1:'那覇',area2:'久米',address:'那覇市久米2-32-1',tel:'098-869-2511',rack:'ラック',zone:'1'},
+  {id:'h072',name:'ホテルリブマックスBUDGET那覇',genre:'hotel',area1:'那覇',area2:'久米',address:'那覇市久米2-2-7',tel:'098-868-0111',rack:'ラック',zone:'1'},
+  {id:'h073',name:'西鉄リゾートイン那覇',genre:'hotel',area1:'那覇',area2:'久米',address:'那覇市久米2-3-13',tel:'098-869-5454',rack:'ラック',zone:'1'},
+  {id:'h074',name:'OMO5沖縄那覇 by 星野リゾート',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山1-3-16',tel:'050-3134-8095',rack:'ラック',zone:'1'},
+  {id:'h075',name:'Prince Smart Inn Naha',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山2-4-13',tel:'050-3114-1392',rack:'ラック',zone:'1'},
+  {id:'h076',name:'コンフォートイン那覇泊港',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-1‐4',tel:'098-866-4711',rack:'ラック',zone:'1'},
+  {id:'h077',name:'ホテルアクアチッタナハ',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-2-20',tel:'098-866-5000',rack:'ラック',zone:'1'},
+  {id:'h078',name:'RJホテル那覇',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-10-21',tel:'098-866-1101',rack:'ラック',zone:'1'},
+  {id:'h079',name:'ﾎﾃﾙ　ﾋﾟｰｽ　アイランド那覇',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-23-1',tel:'',rack:'ラック',zone:'1'},
+  {id:'h080',name:'スマイルホテル沖縄那覇',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-24-1',tel:'098-866-8100',rack:'ラック',zone:'1'},
+  {id:'h081',name:'ホテルリゾネックス那覇',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-11-1',tel:'098-862-7733',rack:'ラック',zone:'1'},
+  {id:'h082',name:'ホテルユクエスタ東町',genre:'hotel',area1:'那覇',area2:'東町',address:'沖縄県那覇市東町７−２２',tel:'988660620',rack:'ラック',zone:'1'},
+  {id:'h083',name:'GRGホテル那覇東町',genre:'hotel',area1:'那覇',area2:'東町',address:'那覇市東町6-16',tel:'098-862-7200',rack:'ラック',zone:'1'},
+  {id:'h084',name:'琉球サンロイヤルホテル',genre:'hotel',area1:'那覇',area2:'東町',address:'那覇市東町6-20',tel:'098-862-3811',rack:'ラック',zone:'1'},
+  {id:'h085',name:'スマイルホテル那覇シティリゾート',genre:'hotel',area1:'那覇',area2:'久米',address:'那覇市久米2-32-1',tel:'098-869-2511',rack:'ラック',zone:'1'},
+  {id:'h086',name:'ロコイン松山',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山1-14-5',tel:'098-869-6565',rack:'ラック',zone:'1'},
+  {id:'h087',name:'ロコイン沖縄',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山1-27-11',tel:'098-869-6511',rack:'ラック',zone:'1'},
+  {id:'h088',name:'Hotel Cocktail Stay Naha',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山1-29-7',tel:'0120-996-9412',rack:'ラック',zone:'1'},
+  {id:'h089',name:'ホテル タイラ',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山1-14−13',tel:'098-868-4515',rack:'ラック',zone:'1'},
+  {id:'h090',name:'ホテルリブマックスBUDGET那覇松山',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山2-12-5',tel:'098-862-0810',rack:'ラック',zone:'1'},
+  {id:'h091',name:'ホテルブライオン那覇',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山2-15-13',tel:'098-868-1600',rack:'ラック',zone:'1'},
+  {id:'h092',name:'ソルヴィータホテル那覇',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山2-17-17',tel:'098-863-1234',rack:'ラック',zone:'1'},
+  {id:'h093',name:'エスティネートホテル那覇',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山2-3-11',tel:'050-3188-9382',rack:'ラック',zone:'1'},
+  {id:'h094',name:'GRGホテル那覇',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山2-16-10',tel:'098-868-6100',rack:'ラック',zone:'1'},
+  {id:'h095',name:'グリーンリッチホテル那覇',genre:'hotel',area1:'那覇',area2:'松山',address:'那覇市松山町2-15-1',tel:'098-863-2400',rack:'ラック',zone:'1'},
+  {id:'h096',name:'ホテルルートイン那覇泊港',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島2-12-5',tel:'098-866-0700',rack:'ラック',zone:'1'},
+  {id:'h097',name:'ホテルアンテルーム那覇',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-27-11',tel:'098-860-51511',rack:'ラック',zone:'1'},
+  {id:'h098',name:'ホテルピースランド久米',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-23',tel:'098-868-1212',rack:'ラック',zone:'1'},
+  {id:'h099',name:'沖縄オリエンタルホテル',genre:'hotel',area1:'那覇',area2:'前島',address:'那覇市前島3-13-16',tel:'098-868-0884',rack:'ラック',zone:'1'},
+  {id:'h100',name:'ロワジールホテル 那覇',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西3-2-1',tel:'098-868-2222',rack:'ラック',zone:'1'},
+  {id:'h101',name:'レンブラントスタイル那覇',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西2-24-3',tel:'098-975-9110',rack:'ラック',zone:'1'},
+  {id:'h102',name:'ホテル・アンドルームス那覇ポート',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西2-23-1',tel:'098-861-8111',rack:'ラック',zone:'1'},
+  {id:'h103',name:'ルートイン グランティア那覇',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西2‐25‐12',tel:'098-860-0771',rack:'ラック',zone:'1'},
+  {id:'h104',name:'パシフィックホテル沖縄',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西3-6-1',tel:'098-868-5162',rack:'ラック',zone:'1'},
+  {id:'h105',name:'那覇ウエストイン',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西1-16-7',tel:'098-862-0048',rack:'ラック',zone:'1'},
+  {id:'h106',name:'ホテル・トリフィート那覇旭橋',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西1-11-19',tel:'098-860-6430',rack:'ラック',zone:'1'},
+  {id:'h107',name:'ティサージホテル那覇',genre:'hotel',area1:'那覇',area2:'西',address:'那覇市西2-14-1',tel:'098-861-1122',rack:'ラック',zone:'1'},
+  {id:'h108',name:'HOTEL SANSUI NAHA 琉球温泉 波之上の湯',genre:'hotel',area1:'那覇',area2:'辻',address:'那覇市辻2-25-1',tel:'0120-996-9411',rack:'ラック',zone:'1'},
+  {id:'h109',name:'那覇ビーチサイドホテル',genre:'hotel',area1:'那覇',area2:'辻',address:'那覇市辻3-2-36',tel:'098-862-2300',rack:'ラック',zone:'1'},
+  {id:'h110',name:'ダブルツリーbyヒルトン那覇首里城',genre:'hotel',area1:'那覇',area2:'首里',address:'那覇市首里山川町1-132-1',tel:'098-886-5454',rack:'ラック',zone:'1'},
+  {id:'h111',name:'ノボテル沖縄那覇',genre:'hotel',area1:'那覇',area2:'松川',address:'那覇市松川40',tel:'098-887-1111',rack:'ラック',zone:'1'},
+  {id:'h112',name:'琉球温泉 瀬長島ホテル',genre:'hotel',area1:'豊見城',area2:'瀬長',address:'豊見城市字瀬長174-5',tel:'098-851-7077',rack:'ラック',zone:'2'},
+  {id:'h113',name:'ストーリーライン瀬長島',genre:'hotel',area1:'豊見城',area2:'瀬長',address:'豊見城市瀬長155-1',tel:'',rack:'ラック',zone:'2'},
+  {id:'h114',name:'ホテルグランビューガーデン沖縄',genre:'hotel',area1:'豊見城',area2:'豊崎',address:'豊見城市豊崎3-82',tel:'098-851-2288',rack:'ラック',zone:'2'},
+  {id:'h115',name:'サザンビーチホテル＆リゾート沖縄',genre:'hotel',area1:'糸満',area2:'西崎',address:'糸満市西崎町1-6-1',tel:'098-992-7500',rack:'ラック',zone:'2'},
+  {id:'h116',name:'琉球ホテル&リゾート 名城ビーチ',genre:'hotel',area1:'糸満',area2:'名城',address:'糸満市名城963',tel:'098-997-5550',rack:'ラック',zone:'2'},
+  {id:'h117',name:'ユインチホテル南城',genre:'hotel',area1:'南城市',area2:'NEW',address:'南城市伊敷新里1688番地',tel:'098-947-0111',rack:'ラック',zone:'2'},
+  {id:'h118',name:'サザンリンクス　リゾート',genre:'hotel',area1:'与那原',area2:'NEW',address:'島尻郡八重瀬領なしろ６９７',tel:'098-998-7001',rack:'ラック',zone:'2'},
+  {id:'h119',name:'ホテルアラクージュ オキナワ',genre:'hotel',area1:'浦添',area2:'港川',address:'浦添市港川512-55',tel:'098-943-5304',rack:'ラック',zone:'3'},
+  {id:'h120',name:'ムーンオーシャン宜野湾 ホテル＆レジデンス',genre:'hotel',area1:'宜野湾',area2:'宇地泊',address:'宜野湾市宇地泊558-8',tel:'098-890-1110',rack:'ラック',zone:'3'},
+  {id:'h121',name:'沖縄プリンスホテル オーシャンビューぎのわん',genre:'hotel',area1:'宜野湾',area2:'真志喜',address:'宜野湾市真志喜3丁目28-1',tel:'098-898-1110',rack:'ラック',zone:'3'},
+  {id:'h122',name:'ラグナガーデンホテル',genre:'hotel',area1:'宜野湾',area2:'真志喜',address:'宜野湾市真志喜4-1-1',tel:'098-897-2121',rack:'ラック',zone:'3'},
+  {id:'h123',name:'ザ・グランドホテルギノワン',genre:'hotel',area1:'宜野湾',area2:'大山',address:'宜野湾市大山3-5-1',tel:'098-898-7700',rack:'ラック',zone:'3'},
+  {id:'h124',name:'OKINAWA CITY HOTEL(沖縄シティホテル)',genre:'hotel',area1:'沖縄',area2:'胡屋',address:'沖縄市胡屋1-8−12',tel:'098-923-2225',rack:'ラック',zone:'3'},
+  {id:'h125',name:'ホテルニューセンチュリー',genre:'hotel',area1:'沖縄',area2:'胡屋',address:'沖縄市胡屋2-1-43',tel:'098-933-5599',rack:'ラック',zone:'3'},
+  {id:'h126',name:'サンライズ観光ホテル',genre:'hotel',area1:'沖縄',area2:'胡屋',address:'沖縄市胡屋2-1−46',tel:'098-933-0171',rack:'ラック',zone:'3'},
+  {id:'h127',name:'クラウンホテルアネックス',genre:'hotel',area1:'沖縄',area2:'胡屋',address:'沖縄市胡屋7-5-12',tel:'098-933-2777',rack:'ラック',zone:'3'},
+  {id:'h128',name:'レフ沖縄アリーナ byベッセルホテルズ',genre:'hotel',area1:'沖縄',area2:'字諸見里',address:'沖縄市字諸見里1766',tel:'098-933-61111',rack:'ラック',zone:'3'},
+  {id:'h129',name:'ホテルコザ',genre:'hotel',area1:'沖縄',area2:'上地',address:'沖縄市上地2-1-29',tel:'098-932-0053',rack:'ラック',zone:'3'},
+  {id:'h130',name:'HOTEL Gran Arena(ホテルグランアリーナ)',genre:'hotel',area1:'沖縄',area2:'上地',address:'沖縄市上地2-17-1',tel:'098-983-8002',rack:'ラック',zone:'3'},
+  {id:'h131',name:'クラウンホテル沖縄',genre:'hotel',area1:'沖縄',area2:'上地',address:'沖縄市上地4-1-51',tel:'098-933-2551',rack:'ラック',zone:'3'},
+  {id:'h132',name:'デイゴホテル',genre:'hotel',area1:'沖縄',area2:'中央',address:'沖縄市中央3-4-2',tel:'098-937-1212',rack:'ラック',zone:'3'},
+  {id:'h133',name:'ライカムクリスタルホテル',genre:'hotel',area1:'沖縄',area2:'中央',address:'沖縄市与儀2-19-11',tel:'098-933-3345',rack:'ラック',zone:'3'},
+  {id:'h134',name:'オキナワ グランメールリゾート',genre:'hotel',area1:'沖縄',area2:'与儀',address:'沖縄市与儀2-8-1',tel:'098-931-1500',rack:'ラック',zone:'3'},
+  {id:'h135',name:'ジ･ウザテラス ビーチクラブヴィラズ',genre:'hotel',area1:'中頭郡',area2:'読谷',address:'中頭郡読谷村宇座630-1',tel:'098-921-6111',rack:'ラック',zone:'3'},
+  {id:'h136',name:'グランドメルキュール沖縄残波岬リゾート',genre:'hotel',area1:'中頭郡',area2:'読谷',address:'中頭郡読谷村宇座1575',tel:'098-958-5000',rack:'ラック',zone:'3'},
+  {id:'h137',name:'星のや沖縄',genre:'hotel',area1:'中頭郡',area2:'読谷',address:'中頭郡読谷村儀間474',tel:'050-3134-8091',rack:'ラック',zone:'3'},
+  {id:'h138',name:'Royal Hotel 沖縄残波岬',genre:'hotel',area1:'中頭郡',area2:'読谷',address:'中頭郡読谷村字宇座1575',tel:'098-958-5000',rack:'ラック',zone:'3'},
+  {id:'h139',name:'ホテル日航アリビラ －ヨミタンリゾート沖縄－',genre:'hotel',area1:'中頭郡',area2:'読谷',address:'中頭郡読谷村字儀間600',tel:'098-982-9111',rack:'ラック',zone:'3'},
+  {id:'h140',name:'ローヤルホテル&レストラン',genre:'hotel',area1:'中頭郡',area2:'読谷',address:'中頭郡読谷村楚辺1315',tel:'098-956-2743',rack:'ラック',zone:'3'},
+  {id:'h141',name:'Ｓｅａ　Ｓｉｄｅ　Ｈｏｔｅｌ　Ｔｈｅ　Ｂｅａｃｈ',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町宮城3-134',tel:'098-926-2674',rack:'ラック',zone:'3'},
+  {id:'h142',name:'レクー沖縄北谷スパ＆リゾート',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町字美浜34-2',tel:'098-936-2288',rack:'ラック',zone:'3'},
+  {id:'h143',name:'ベッセルホテルカンパーナ沖縄',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町字美浜9-22',tel:'098-926-1188',rack:'ラック',zone:'3'},
+  {id:'h144',name:'テラスガーデン美浜リゾート',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町美浜2-5-18',tel:'098-926-1214',rack:'ラック',zone:'3'},
+  {id:'h145',name:'ラ・ジェント・ホテル沖縄北谷',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町美浜25-3',tel:'098-926-0210',rack:'ラック',zone:'3'},
+  {id:'h146',name:'ヒルトン沖縄北谷リゾート',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町美浜40-1',tel:'098-901-1111',rack:'ラック',zone:'3'},
+  {id:'h147',name:'ダブルツリーbyヒルトン沖縄北谷リゾート',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町美浜43',tel:'098-901-4600',rack:'ラック',zone:'3'},
+  {id:'h148',name:'ザ・ビーチタワー沖縄',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町美浜8-6',tel:'098-921-7711',rack:'ラック',zone:'3'},
+  {id:'h149',name:'ビーチフロントタワーミハマ',genre:'hotel',area1:'中頭郡',area2:'北谷',address:'中頭郡北谷町北谷1-13−6',tel:'098-988-5553',rack:'ラック',zone:'3'},
+  {id:'h150',name:'EMウェルネス 暮らしの発酵ライフスタイルリゾート',genre:'hotel',area1:'中頭郡',area2:'北中城',address:'中頭郡北中城村喜舎場1478',tel:'098-935-1500',rack:'ラック',zone:'3'},
+  {id:'h151',name:'ジ･アッタテラス クラブタワーズ',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村安富祖1079',tel:'098-983-3333',rack:'ラック',zone:'4'},
+  {id:'h152',name:'みゆきハマバルリゾート',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村安富祖1314',tel:'098-967-7722',rack:'ラック',zone:'4'},
+  {id:'h153',name:'ホテルみゆきビーチ',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村安富祖1583−2',tel:'098-967-8031',rack:'ラック',zone:'4'},
+  {id:'h154',name:'ルネッサンス リゾート オキナワ',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村山田3425-2',tel:'098-965-0707',rack:'ラック',zone:'4'},
+  {id:'h155',name:'UMITO PLAGE The Atta Okinawa',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字安富祖1894-1',tel:'098-970-8820',rack:'ラック',zone:'4'},
+  {id:'h156',name:'ＨｏｍｍＳｔａｙＹｕｍｉｈａＯｋｉｎａｗａ',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字山田2455-1',tel:'098-923-1108',rack:'ラック',zone:'4'},
+  {id:'h157',name:'ザ・ムーンビーチ ミュージアムリゾート',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字前兼久1203',tel:'098-965-1020',rack:'ラック',zone:'4'},
+  {id:'h158',name:'リザンシーパークホテル谷茶ベイ',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字谷茶1496',tel:'098-964-6611',rack:'ラック',zone:'4'},
+  {id:'h159',name:'ホテルサンセットヒル',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字仲泊1327-3',tel:'098-965-6310',rack:'ラック',zone:'4'},
+  {id:'h160',name:'かねひで恩納マリンビューパレス',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字前兼久497-3',tel:'098-965-6111',rack:'ラック',zone:'4'},
+  {id:'h161',name:'ホテルモントレ沖縄 スパ＆リゾート',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字冨着1550-1',tel:'098-993-7111',rack:'ラック',zone:'4'},
+  {id:'h162',name:'シェラトン沖縄サンマリーナリゾート',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字冨着66-1',tel:'098-965-2222',rack:'ラック',zone:'4'},
+  {id:'h163',name:'AQUASENSE Hotel & Resort',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字冨着黒崎原86-1',tel:'098-987-8031',rack:'ラック',zone:'4'},
+  {id:'h164',name:'カフー リゾート フチャク コンド・ホテル',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村字冨着志利福地原246-1',tel:'098-964-7000',rack:'ラック',zone:'4'},
+  {id:'h165',name:'星野リゾート　BEB5沖縄瀬良垣',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村瀬良垣1860-4',tel:'050-3134-8094',rack:'ラック',zone:'4'},
+  {id:'h166',name:'ANAインターコンチネンタル万座ビーチリゾート',genre:'hotel',area1:'',area2:'',address:'国頭郡恩納村瀬良垣2260',tel:'098-966-1211',rack:'ラック',zone:'1'},
+  {id:'h167',name:'オリエンタルヒルズ沖縄',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村瀬良垣79-1',tel:'0120-162-0781',rack:'ラック',zone:'4'},
+  {id:'h168',name:'HIYORI オーシャンリゾート 沖縄',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村仲泊1055-1',tel:'098-965-1600',rack:'ラック',zone:'4'},
+  {id:'h169',name:'ハイアットリージェンシー瀬良垣アイランド沖縄',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村瀬良垣1108',tel:'098-960-4321',rack:'ラック',zone:'4'},
+  {id:'h170',name:'ロワジールリビングスイーツ瀬良垣',genre:'hotel',area1:'',area2:'',address:'',tel:'',rack:'ラック',zone:'1'},
+  {id:'h171',name:'オーシャンビューイン希望ヶ丘',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村名嘉真2288-580',tel:'098-983-3300',rack:'ラック',zone:'4'},
+  {id:'h172',name:'沖縄かりゆしビーチリゾート・オーシャンスパ',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村名嘉真ヤーシ原2591-1',tel:'098-967-8731',rack:'ラック',zone:'4'},
+  {id:'h173',name:'EXES',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村名嘉真ヤーシ原2592-40',tel:'098-967-7500',rack:'ラック',zone:'4'},
+  {id:'h174',name:'ハレクラニ沖縄',genre:'hotel',area1:'国頭',area2:'恩納',address:'国頭郡恩納村名嘉真1967-1',tel:'098-953-8600',rack:'ラック',zone:'4'},
+  {id:'h175',name:'リブマックス アムス・カンナリゾートヴィラ',genre:'hotel',area1:'国頭',area2:'宜野座',address:'国頭郡宜野座村字漢那397-1',tel:'098-968-7011',rack:'ラック',zone:'4'},
+  {id:'h176',name:'カヌチャベイホテル＆ヴィラズ',genre:'hotel',area1:'名護',area2:'安部',address:'沖縄県名護市安部156-2',tel:'0570-018880',rack:'ラック',zone:'5'},
+  {id:'h177',name:'ザ・リッツ・カールトン沖縄',genre:'hotel',area1:'名護',area2:'喜瀬',address:'名護市喜瀬1343-1',tel:'0980-43-5555',rack:'ラック',zone:'5'},
+  {id:'h178',name:'オリエンタルホテル 沖縄リゾート＆スパ',genre:'hotel',area1:'名護',area2:'喜瀬',address:'名護市喜瀬1490-1',tel:'0980-51-1000',rack:'ラック',zone:'5'},
+  {id:'h179',name:'ザ・ブセナテラス',genre:'hotel',area1:'名護',area2:'喜瀬',address:'名護市喜瀬1808',tel:'0980-51-1333',rack:'ラック',zone:'5'},
+  {id:'h180',name:'スーパーホテル沖縄・名護',genre:'hotel',area1:'名護',area2:'宮里',address:'名護市宮里1018',tel:'0980-50-9000',rack:'ラック',zone:'5'},
+  {id:'h181',name:'フェニックスパークホテル',genre:'hotel',area1:'名護',area2:'宮里',address:'名護市宮里3-29-12',tel:'0980-43-6607',rack:'ラック',zone:'5'},
+  {id:'h182',name:'ホテルゆがふいんおきなわ',genre:'hotel',area1:'名護',area2:'宮里',address:'名護市宮里453-1',tel:'0980-53-0031',rack:'ラック',zone:'5'},
+  {id:'h183',name:'TWIN-LINE HOTEL YANBARU OKINAWA JAPAN',genre:'hotel',area1:'名護',area2:'幸喜',address:'名護市幸喜108',tel:'0980-53-0330',rack:'ラック',zone:'5'},
+  {id:'h184',name:'ベストウェスタン沖縄幸喜ビーチ',genre:'hotel',area1:'名護',area2:'幸喜',address:'名護市幸喜117',tel:'0980-54-8155',rack:'ラック',zone:'5'},
+  {id:'h185',name:'沖縄リゾートホテル かねひで喜瀬ビーチパレス',genre:'hotel',area1:'名護',area2:'字喜瀬',address:'名護市字喜瀬115- 2',tel:'098-901-5454',rack:'ラック',zone:'5'},
+  {id:'h186',name:'ホテルリゾネックス名護',genre:'hotel',area1:'名護',area2:'字山入端',address:'名護市字山入端247-1',tel:'0980-53-8021',rack:'ラック',zone:'5'},
+  {id:'h187',name:'グリーンリッチホテル沖縄名護',genre:'hotel',area1:'名護',area2:'城',address:'名護市城2-646',tel:'0980-51-0111',rack:'ラック',zone:'5'},
+  {id:'h188',name:'ホテル デルフィーノ 名護',genre:'hotel',area1:'名護',area2:'大南',address:'名護市大南1-5-14',tel:'0980-51-1717',rack:'ラック',zone:'5'},
+  {id:'h189',name:'ホテルルートイン名護',genre:'hotel',area1:'名護',area2:'東江',address:'名護市東江5-11-3',tel:'0980-54-8511',rack:'ラック',zone:'5'},
+  {id:'h190',name:'アラマハイナ コンドホテル',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町山川1421-1',tel:'0980-51-7800',rack:'ラック',zone:'5'},
+  {id:'h191',name:'ホテルマハイナ ウェルネスリゾートオキナワ',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町山川1456',tel:'0980-51-7488',rack:'ラック',zone:'5'},
+  {id:'h192',name:'本部グリーンパークホテル',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町字古島404',tel:'0980-48-3211',rack:'ラック',zone:'5'},
+  {id:'h193',name:'マリンピアザオキナワ',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町字浜元410',tel:'0980-48-3000',rack:'ラック',zone:'5'},
+  {id:'h194',name:'Ｅ－ｈｏｒｉｚｏｎ　Ｒｅｓｏｒｔ　コンドミニアム瀬底',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町瀬底2268',tel:'0980-43-5229',rack:'ラック',zone:'5'},
+  {id:'h195',name:'ヒルトン沖縄瀬底リゾート',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町瀬底5750',tel:'0570-02-07011',rack:'ラック',zone:'5'},
+  {id:'h196',name:'ロイヤルビューホテル美ら海',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町石川938',tel:'0980-48-3638',rack:'ラック',zone:'5'},
+  {id:'h197',name:'ホテル オリオン モトブ リゾート＆スパ',genre:'hotel',area1:'国頭',area2:'本部',address:'国頭郡本部町備瀬148-1',tel:'0980-51-7300',rack:'ラック',zone:'5'},
+  {id:'r001',name:'日産レンタカー 琉球ホテル＆リゾート名城ビーチ店',genre:'rental',area1:'南部',area2:'糸満',address:'沖縄県糸満市名城963',tel:'',rack:'ラック',zone:'2'},
+  {id:'r002',name:'ニッポンレンタカー 那覇空港第３営業所',genre:'rental',area1:'南部',area2:'豊見城',address:'沖縄県豊見城市豊崎３－９５',tel:'',rack:'ラック',zone:'2'},
+  {id:'r003',name:'オリックスレンタカー 那覇空港店',genre:'rental',area1:'南部',area2:'豊見城',address:'沖縄県 豊見城市豊崎１－１１７４',tel:'',rack:'ラック',zone:'2'},
+  {id:'r004',name:'OTSレンタカー 臨空豊崎営業所(那覇空港）',genre:'rental',area1:'豊見城',area2:'豊崎',address:'豊見城市豊崎3-37',tel:'',rack:'ラック',zone:'2'},
+  {id:'r005',name:'umuiレンラカー',genre:'rental',area1:'豊見城',area2:'豊崎',address:'豊見城市豊崎1-325',tel:'',rack:'ラック',zone:'2'},
+  {id:'r006',name:'シーサイドレンタカー',genre:'rental',area1:'豊見城',area2:'翁長',address:'豊見城市翁長837-10',tel:'',rack:'ラック',zone:'2'},
+  {id:'r007',name:'道の駅豊崎',genre:'rental',area1:'豊見城',area2:'豊崎',address:'',tel:'',rack:'ラック',zone:'2'},
+  {id:'r008',name:'スカイ倶楽部',genre:'rental',area1:'豊見城',area2:'豊崎',address:'豊見城市豊崎３－６０',tel:'',rack:'ラック',zone:'2'},
+  {id:'r009',name:'道の駅糸満',genre:'rental',area1:'糸満',area2:'糸満',address:'',tel:'',rack:'ラック',zone:'2'},
+  {id:'r010',name:'ライトマークEVレンタカー',genre:'rental',area1:'豊見城',area2:'渡橋名',address:'豊見城市渡橋名279-2',tel:'',rack:'ラック',zone:'2'},
+  {id:'r011',name:'スィートレンタカー',genre:'rental',area1:'南部',area2:'豊見城',address:'沖縄県豊見城市名嘉地１２１番地（豊崎体育館通り）',tel:'',rack:'ラック',zone:'2'},
+  {id:'r012',name:'トヨタレンタカー とよみ店',genre:'rental',area1:'南部',area2:'豊見城',address:'豊見城市渡橋名280-2（よね食堂左側）',tel:'',rack:'ラック',zone:'2'},
+  {id:'r013',name:'ダイハツレンタカー 豊見城店',genre:'rental',area1:'南部',area2:'豊見城',address:'沖縄県豊見城市座安331（よね食堂右側）',tel:'',rack:'ラック',zone:'2'},
+  {id:'r014',name:'ユニバースレンタカー',genre:'rental',area1:'南部',area2:'豊見城',address:'沖縄県豊見城市伊良波518-1（忠孝交差点）',tel:'',rack:'ラック',zone:'2'},
+  {id:'r015',name:'バジェット･レンタカー 那覇空港店',genre:'rental',area1:'南部',area2:'豊見城',address:'沖縄県豊見城市名嘉地２５９−５（メイクマン手前）',tel:'',rack:'ラック',zone:'2'},
+  {id:'r016',name:'アップルレンタカー 那覇空港店',genre:'rental',area1:'南部',area2:'豊見城',address:'沖縄県豊見城市字瀬長81-1（神社の角）',tel:'',rack:'ラック',zone:'2'},
+  {id:'r017',name:'トヨタレンタカー 那覇空港シーサイド店',genre:'rental',area1:'豊見城',area2:'豊見城',address:'豊見城市字与根50番地132 那覇空港（瀬長横リッチ）',tel:'',rack:'ラック',zone:'2'},
+  {id:'r018',name:'88レンタカー沖縄 空港前店',genre:'rental',area1:'豊見城',area2:'豊見城',address:'豊見城市豊見城471－2',tel:'',rack:'ラック',zone:'2'},
+  {id:'r019',name:'ゴーヤレンタカー',genre:'rental',area1:'豊見城',area2:'豊見城',address:'豊見城市字瀬永95－1',tel:'',rack:'ラック',zone:'2'},
+  {id:'r020',name:'トヨタレンタカー 安謝店',genre:'rental',area1:'那覇',area2:'安謝',address:'那覇市安謝664（コジマ隣）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r021',name:'オリックスレンタカー とまりんカウンター',genre:'rental',area1:'那覇',area2:'前島',address:'沖縄県 那覇市前島３丁目２５－１ 泊ふ頭旅客ターミナルビル内',tel:'',rack:'ラック',zone:'1'},
+  {id:'r022',name:'Timesレンタカー 那覇国際通り店',genre:'rental',area1:'那覇',area2:'安里',address:'沖縄県那覇市安里2-1-1CARGOES 1F（オリオンホテル向かい）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r023',name:'ユウ・アイレンタカー 国際通り店',genre:'rental',area1:'那覇',area2:'牧志',address:'那覇市牧志2丁目16番19号（ジュンク堂そば）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r024',name:'オリックスレンタカー 美栄橋駅前店',genre:'rental',area1:'那覇',area2:'牧志',address:'沖縄県 那覇市牧志２－１７－１２（ジュンク堂そば）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r025',name:'スカイレンタカー 那覇店',genre:'rental',area1:'那覇',area2:'久米',address:'沖縄県那覇市久米2-6-16（ナハナ１本奥通り）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r026',name:'ニッポンレンタカー 那覇空港営業所',genre:'rental',area1:'那覇',area2:'西',address:'沖縄県那覇市西３丁目１５番４８号（波の上）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r027',name:'オリックスレンタカー 那覇西町店',genre:'rental',area1:'那覇',area2:'西',address:'沖縄県 那覇市西２－３－１（ロワジール手前）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r028',name:'TAレンタカー
+（株式会社阿久津工業）',genre:'rental',area1:'那覇',area2:'西',address:'沖縄県那覇市西2-13-17',tel:'',rack:'ラック',zone:'1'},
+  {id:'r029',name:'Timesレンタカー 那覇空港店',genre:'rental',area1:'那覇',area2:'鏡水',address:'沖縄県那覇市鏡水457-1',tel:'',rack:'ラック',zone:'1'},
+  {id:'r030',name:'セレクトレンタカー 那覇営業所',genre:'rental',area1:'那覇',area2:'奥武山',address:'沖縄県那覇市奥武山町26-24 奥武山マンションビル1F（球場手前）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r031',name:'フジレンタカー 本社・那覇営業所',genre:'rental',area1:'那覇',area2:'奥武山',address:'沖縄県那覇市奥武山町26-7（球場手前）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r032',name:'プルメリアレンタカー沖縄  那覇空港店',genre:'rental',area1:'那覇',area2:'奥武山',address:'沖縄県那覇市奥武山町14番1',tel:'',rack:'ラック',zone:'1'},
+  {id:'r033',name:'Jネットレンタカー 那覇空港店',genre:'rental',area1:'那覇',area2:'金城',address:'那覇市金城3-7-2（コンベンローソン向かい）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r034',name:'HVレンタカー 那覇空港営業所',genre:'rental',area1:'那覇',area2:'金城',address:'沖縄県那覇市 字金城3-8-14（コンベン331沿い）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r035',name:'ABCレンタカー 那覇空港営業所',genre:'rental',area1:'那覇',area2:'田原',address:'沖縄県那覇市田原1-17-9（那覇西高校そば）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r036',name:'オリックスレンタカー 那覇空港会員店',genre:'rental',area1:'那覇',area2:'安次嶺',address:'沖縄県 那覇市安次嶺１４－５',tel:'',rack:'ラック',zone:'1'},
+  {id:'r037',name:'マリオレンラカー１号店',genre:'rental',area1:'那覇',area2:'赤嶺',address:'那覇市赤嶺1-10-7',tel:'',rack:'ラック',zone:'1'},
+  {id:'r038',name:'日産レンタカー 那覇空港第２店',genre:'rental',area1:'那覇',area2:'赤嶺',address:'沖縄県那覇市赤嶺2-13-13',tel:'',rack:'ラック',zone:'1'},
+  {id:'r039',name:'トヨタレンタカー 那覇空港店',genre:'rental',area1:'那覇',area2:'赤嶺',address:'那覇市赤嶺2丁目15-11',tel:'',rack:'ラック',zone:'1'},
+  {id:'r040',name:'トヨタレンタカー 空港店２',genre:'rental',area1:'那覇',area2:'赤嶺',address:'那覇市赤嶺2-13-1',tel:'',rack:'ラック',zone:'1'},
+  {id:'r041',name:'OTSレンタカー 国内ファミリートラベラー店',genre:'rental',area1:'那覇',area2:'赤嶺',address:'那覇市赤嶺1-15-3',tel:'',rack:'ラック',zone:'1'},
+  {id:'r042',name:'グッドスピードレンタカー 那覇空港前店',genre:'rental',area1:'那覇',area2:'赤嶺',address:'沖縄県那覇市赤嶺2-11-15 O-A号室',tel:'',rack:'ラック',zone:'1'},
+  {id:'r043',name:'オリックスレンタカー ＪＡＬパックプレミア店',genre:'rental',area1:'那覇',area2:'赤嶺',address:'沖縄県 那覇市赤嶺１－１２－１１',tel:'',rack:'ラック',zone:'1'},
+  {id:'r044',name:'ヒートスポーツレンタカー',genre:'rental',area1:'那覇',area2:'赤嶺',address:'那覇市赤嶺１－１－１４（アリエッタ１Ｆ）',tel:'',rack:'ラック',zone:'1'},
+  {id:'r045',name:'なはレンタカー',genre:'rental',area1:'那覇',area2:'赤嶺',address:'沖縄県那覇市赤嶺2-4-5',tel:'',rack:'ラック',zone:'1'},
+  {id:'r046',name:'空港レンタカー',genre:'rental',area1:'那覇',area2:'赤嶺',address:'沖縄県那覇市赤嶺2-4-11',tel:'',rack:'ラック',zone:'1'},
+  {id:'r047',name:'スカイレンタカー 那覇空港店',genre:'rental',area1:'那覇',area2:'具志',address:'沖縄県那覇市具志1-23-8',tel:'',rack:'ラック',zone:'1'},
+  {id:'r048',name:'ユウ・アイレンタカー 空港店',genre:'rental',area1:'那覇',area2:'具志',address:'那覇市具志3丁目25番17号',tel:'',rack:'ラック',zone:'1'},
+  {id:'r049',name:'オリックスレンタカー 浦添店',genre:'rental',area1:'浦添',area2:'浦添',address:'沖縄県 浦添市牧港５－４－１',tel:'',rack:'ラック',zone:'3'},
+  {id:'r050',name:'トヨタレンタカー 北谷店',genre:'rental',area1:'中部',area2:'北谷',address:'中頭郡北谷町字宮城1-37北谷トヨタランド内',tel:'',rack:'ラック',zone:'3'},
+  {id:'r051',name:'オリックスレンタカー 北谷フィッシャリーナ店',genre:'rental',area1:'中部',area2:'北谷',address:'沖縄県 中頭郡北谷町美浜４０－２',tel:'',rack:'ラック',zone:'3'},
+  {id:'r052',name:'オリックスレンタカー 日航アリビラカウンター',genre:'rental',area1:'中部',area2:'読谷',address:'沖縄県 中頭郡読谷村字儀間６００ ホテル日航アリビラ内',tel:'',rack:'ラック',zone:'3'},
+  {id:'r053',name:'Timesレンタカー 中部店',genre:'rental',area1:'中部',area2:'読谷',address:'沖縄県中頭郡読谷村字比謝400-7',tel:'',rack:'ラック',zone:'3'},
+  {id:'r054',name:'トヨタレンタカー 中部店',genre:'rental',area1:'中部',area2:'沖縄',address:'沖縄市字大里1-12-27',tel:'',rack:'ラック',zone:'3'},
+  {id:'r055',name:'フジレンタカー 沖縄市営業所',genre:'rental',area1:'中部',area2:'沖縄',address:'沖縄県沖縄市山内4-20-1',tel:'',rack:'ラック',zone:'3'},
+  {id:'r056',name:'オリックスレンタカー 恩納店',genre:'rental',area1:'北部',area2:'恩納',address:'沖縄県 国頭郡恩納村字前兼久２６９－２',tel:'',rack:'ラック',zone:'4'},
+  {id:'r057',name:'オリックスレンタカー リザンシーパークホテルカウンター',genre:'rental',area1:'北部',area2:'恩納',address:'沖縄県 国頭郡恩納村字谷茶１４９６',tel:'',rack:'ラック',zone:'4'},
+  {id:'r058',name:'ABCレンタカー 恩納南営業所',genre:'rental',area1:'北部',area2:'恩納',address:'恩納村前兼久167番地 ピンクマリーンホテル内',tel:'',rack:'ラック',zone:'4'},
+  {id:'r059',name:'オリックスレンタカー ザ・ブセナテラスカウンター',genre:'rental',area1:'北部',area2:'名護',address:'沖縄県 名護市喜瀬１８０８',tel:'',rack:'ラック',zone:'5'},
+  {id:'r060',name:'トヨタレンタカー 名護店',genre:'rental',area1:'北部',area2:'名護',address:'名護市東江5-21-5',tel:'',rack:'ラック',zone:'5'},
+  {id:'m001',name:'那覇空港 TAC',genre:'michi',area1:'那覇',area2:'空港',address:'那覇空港',tel:'',rack:'ラック',zone:'1'},
+  {id:'m002',name:'那覇空港 JTB（国内線）',genre:'michi',area1:'那覇',area2:'空港',address:'那覇空港',tel:'',rack:'ラック',zone:'1'},
+  {id:'m003',name:'那覇空港 JTB（国際線）',genre:'michi',area1:'那覇',area2:'空港',address:'那覇空港',tel:'',rack:'ラック',zone:'1'},
+  {id:'m004',name:'道の駅 糸満（ファーマーズ）',genre:'michi',area1:'糸満',area2:'糸満',address:'糸満ファーマーズ 観光協会',tel:'',rack:'ラック',zone:'2'},
+  {id:'m005',name:'道の駅 豊崎（ファーマーズ）',genre:'michi',area1:'豊見城',area2:'豊崎',address:'豊崎ファーマーズ 観光協会',tel:'',rack:'ラック',zone:'2'},
+  {id:'m006',name:'道の駅 八重瀬（ファーマーズ）',genre:'michi',area1:'南部',area2:'八重瀬',address:'八重瀬ファーマーズ',tel:'',rack:'ラック',zone:'2'},
+  {id:'m007',name:'道の駅 嘉手納',genre:'michi',area1:'嘉手納',area2:'嘉手納',address:'嘉手納 道の駅',tel:'',rack:'ラック',zone:'3'},
+  {id:'m008',name:'道の駅 宜野座',genre:'michi',area1:'宜野座',area2:'宜野座',address:'宜野座 道の駅',tel:'',rack:'ラック',zone:'1'},
+  {id:'m009',name:'道の駅 許田（名護）',genre:'michi',area1:'名護',area2:'許田',address:'許田の道の駅',tel:'',rack:'ラック',zone:'5'},
+  {id:'m010',name:'とまりん（前島漁港）',genre:'michi',area1:'那覇',area2:'前島',address:'前島 漁港',tel:'',rack:'ラック',zone:'1'},
+  {id:'m011',name:'大型船漁港（若狭）',genre:'michi',area1:'那覇',area2:'若狭',address:'若狭 漁港',tel:'',rack:'ラック',zone:'1'},
+  {id:'m012',name:'高速IC 上り中城インター',genre:'michi',area1:'中頭郡',area2:'北中城',address:'中城インター',tel:'',rack:'ラック',zone:'3'},
+  {id:'m013',name:'高速IC 上り伊芸インター',genre:'michi',area1:'国頭',area2:'恩納',address:'伊芸インター',tel:'',rack:'ラック',zone:'4'},
+  {id:'m014',name:'高速IC 下り中村インター',genre:'michi',area1:'名護',area2:'名護',address:'中村インター',tel:'',rack:'ラック',zone:'5'},
+  {id:'m015',name:'高速IC 下り伊芸インター',genre:'michi',area1:'国頭',area2:'恩納',address:'伊芸インター',tel:'',rack:'ラック',zone:'4'},
+  {id:'m016',name:'モノレール（ゆいレール）',genre:'michi',area1:'那覇',area2:'那覇',address:'那覇市本社',tel:'',rack:'ラック',zone:'1'}
+];
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  currentUser: null,
+  loginType: 'admin',
+  facilities: [],
+  staff: [],
+  schedules: [],
+  deliveries: [], // {date, staffId, zoneId, facilities:[{facId, status, note, photos}], startKm, endKm, startTime, endTime, meterStartPhotos, meterEndPhotos, tollPhotos}
+  notifications: [],
+  availability: {}, // {staffId: {date: 'available'|'unavailable'}}
+  filterArea: 'all',
+  filterGenre: 'all',
+  selectedFacilityEdit: null,
+  selectedStaffEdit: null,
+  activeDelivery: null, // {deliveryId, facilityIdx}
+  checkInFacId: null,
+  checkInStatus: null,
+  today: new Date().toISOString().split('T')[0],
+};
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('pamph_state');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      state = {...state, ...parsed};
+    }
+  } catch(e) {}
+  if (!state.facilities || state.facilities.length === 0) {
+    state.facilities = INITIAL_FACILITIES.map(f => ({
+      ...f,
+      zone: getAreaZone(f.area1, f.area2),
+      status: 'pending',
+      lastDone: null,
+    }));
+  }
+  if (!state.staff || state.staff.length === 0) {
+    state.staff = [
+      {id:'s001', name:'田中 健一', pin:'1234', car:'沖縄 300 あ 1111', fuel:15.0, zone:'1', emoji:'🧑', online:true},
+      {id:'s002', name:'山城 美咲', pin:'2345', car:'沖縄 300 い 2222', fuel:14.5, zone:'2', emoji:'👩', online:false},
+      {id:'s003', name:'新垣 太郎', pin:'3456', car:'沖縄 300 う 3333', fuel:16.0, zone:'3', emoji:'👨', online:true},
+      {id:'s004', name:'宮城 花子', pin:'4567', car:'沖縄 300 え 4444', fuel:13.5, zone:'4', emoji:'👱', online:false},
+    ];
+  }
+  if (!state.notifications) state.notifications = [
+    {id:'n1', text:'田中 健一 が配達を開始しました', time:'09:15', unread:true},
+    {id:'n2', text:'新垣 太郎 がエリア3 配達完了を報告', time:'13:42', unread:true},
+    {id:'n3', text:'宮城 花子 が4/15 出勤可能を回答', time:'昨日', unread:false},
+  ];
+  if (!state.deliveries) state.deliveries = [];
+  if (!state.schedules) state.schedules = [];
+  if (!state.availability) state.availability = {};
+  
+  // Auto-reset completed facilities after 14 days
+  const now = new Date();
+  state.facilities.forEach(f => {
+    if (f.status === 'done' && f.lastDone) {
+      const done = new Date(f.lastDone);
+      const diff = (now - done) / (1000*60*60*24);
+      if (diff >= 14) { f.status = 'pending'; f.lastDone = null; }
+    }
+  });
+}
+
+function saveState() {
+  try {
+    const toSave = {...state, currentUser: null};
+    localStorage.setItem('pamph_state', JSON.stringify(toSave));
+  } catch(e) {}
+}
+
+// ============================================================
+// LOGIN
+// ============================================================
+let loginType = 'admin';
+
+function setLoginType(t) {
+  loginType = t;
+  document.getElementById('optAdmin').classList.toggle('active', t==='admin');
+  document.getElementById('optStaff').classList.toggle('active', t==='staff');
+  document.getElementById('staffSelectWrap').style.display = t==='staff' ? 'block' : 'none';
+  if (t==='staff') {
+    const sel = document.getElementById('staffPicker');
+    sel.innerHTML = '<option value="">担当者を選択してください</option>';
+    state.staff.forEach(s => {
+      sel.innerHTML += `<option value="${s.id}">${s.emoji||'👤'} ${s.name}</option>`;
+    });
+  }
+}
+
+function setupPinInputs() {
+  const ids = ['p1','p2','p3','p4'];
+  ids.forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      el.value = el.value.replace(/\D/,'');
+      if (el.value && i < 3) document.getElementById(ids[i+1]).focus();
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !el.value && i > 0) document.getElementById(ids[i-1]).focus();
+    });
+  });
+}
+
+function getPin() {
+  return ['p1','p2','p3','p4'].map(id => document.getElementById(id).value).join('');
+}
+
+function clearPin() {
+  ['p1','p2','p3','p4'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('p1').focus();
+}
+
+function doLogin() {
+  const pin = getPin();
+  const err = document.getElementById('loginErr');
+  err.style.display = 'none';
+  if (loginType === 'admin') {
+    if (pin === '1116') {
+      state.currentUser = {type:'admin', name:'管理者', id:'admin'};
+      enterApp();
+    } else {
+      err.style.display = 'block'; clearPin();
+    }
+  } else {
+    const staffId = document.getElementById('staffPicker').value;
+    if (!staffId) { err.textContent = '担当者を選択してください'; err.style.display = 'block'; return; }
+    const staff = state.staff.find(s => s.id === staffId);
+    if (staff && staff.pin === pin) {
+      state.currentUser = {type:'staff', name:staff.name, id:staff.id, emoji:staff.emoji};
+      enterApp();
+    } else {
+      err.textContent = 'PINコードが違います'; err.style.display = 'block'; clearPin();
+    }
+  }
+}
+
+function doLogout() {
+  state.currentUser = null;
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  clearPin();
+  setLoginType('admin');
+}
+
+// ============================================================
+// APP SETUP
+// ============================================================
+const ADMIN_PAGES = [
+  {id:'dashboard', label:'📊 ダッシュボード'},
+  {id:'facilities', label:'🏨 施設一覧'},
+  {id:'staff', label:'👥 担当者管理'},
+  {id:'schedule', label:'📅 スケジュール'},
+  {id:'route', label:'🗺️ ルート'},
+  {id:'reports', label:'📄 日報'},
+];
+const STAFF_PAGES = [
+  {id:'dashboard', label:'📊 ホーム'},
+  {id:'delivery', label:'🚗 本日の配達'},
+  {id:'facilities', label:'🏨 施設一覧'},
+  {id:'availability', label:'📆 出勤可能日'},
+  {id:'route', label:'🗺️ ルート'},
+  {id:'reports', label:'📄 日報'},
+];
+
+function enterApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  const u = state.currentUser;
+  document.getElementById('userNameDisp').textContent = u.type==='admin' ? '管理者' : u.name;
+  const badge = document.getElementById('userBadge');
+  if (u.type==='admin') { badge.textContent='A'; badge.className='userBadge badge-admin'; }
+  else { badge.textContent=u.emoji||'👤'; badge.className='userBadge badge-staff'; badge.style.fontSize='14px'; }
+  renderNav();
+  showPage('dashboard');
+}
+
+function renderNav() {
+  const pages = state.currentUser.type==='admin' ? ADMIN_PAGES : STAFF_PAGES;
+  const nav = document.getElementById('mainNav');
+  nav.innerHTML = pages.map(p =>
+    `<div class="navItem" id="nav-${p.id}" onclick="showPage('${p.id}')">${p.label}</div>`
+  ).join('');
+}
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.navItem').forEach(n => n.classList.remove('active'));
+  const page = document.getElementById(`page-${id}`);
+  const nav = document.getElementById(`nav-${id}`);
+  if (page) page.classList.add('active');
+  if (nav) nav.classList.add('active');
+  renderPage(id);
+}
+
+function renderPage(id) {
+  switch(id) {
+    case 'dashboard': renderDashboard(); break;
+    case 'facilities': renderFacilities(); break;
+    case 'staff': renderStaff(); break;
+    case 'schedule': renderSchedule(); break;
+    case 'delivery': renderDelivery(); break;
+    case 'route': renderRoute(); break;
+    case 'reports': renderReports(); break;
+    case 'availability': renderAvailability(); break;
+  }
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function renderDashboard() {
+  const total = state.facilities.length;
+  const done = state.facilities.filter(f=>f.status==='done').length;
+  const pending = state.facilities.filter(f=>f.status==='pending').length;
+  const activeStaff = state.staff.filter(s=>s.online).length;
+  const pct = total>0 ? Math.round(done/total*100) : 0;
+
+  document.getElementById('dashStats').innerHTML = `
+    <div class="statCard ocean"><div class="statLabel">登録施設数</div><div class="statValue">${total}</div><div class="statSub">件</div></div>
+    <div class="statCard forest"><div class="statLabel">配布完了</div><div class="statValue">${done}</div><div class="statSub">件 (${pct}%)</div></div>
+    <div class="statCard coral"><div class="statLabel">未完了</div><div class="statValue">${pending}</div><div class="statSub">件</div></div>
+    <div class="statCard amber"><div class="statLabel">本日稼働</div><div class="statValue">${activeStaff}</div><div class="statSub">名</div></div>
+  `;
+
+  // Area progress
+  const areaHtml = [1,2,3,4,5].map(z => {
+    const facs = state.facilities.filter(f => f.zone === String(z));
+    const d = facs.filter(f=>f.status==='done').length;
+    const t = facs.length;
+    const p = t>0 ? Math.round(d/t*100) : 0;
+    const colors = ['ocean','amber','forest','purple','coral'];
+    return `<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-size:13px;font-weight:600;">${AREA_NAMES[z]}</span>
+        <span style="font-size:12px;color:var(--slate-light);">${d}/${t}件</span>
+      </div>
+      <div class="progressBar"><div class="progressFill progress-${['ocean','forest','ocean','coral','forest'][z-1]}" style="width:${p}%"></div></div>
+    </div>`;
+  }).join('');
+  document.getElementById('areaProgress').innerHTML = areaHtml;
+
+  // Notifications
+  document.getElementById('notifList').innerHTML = state.notifications.slice(0,5).map(n =>
+    `<div class="notifItem ${n.unread?'unread':''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <span>${n.text}</span>
+        <span style="font-size:11px;color:var(--slate-light);white-space:nowrap;margin-left:8px;">${n.time}</span>
+      </div>
+    </div>`
+  ).join('') || '<p style="color:var(--slate-light);font-size:13px;">通知なし</p>';
+
+  // Today schedule
+  const todaySched = state.schedules.filter(s => s.date === state.today);
+  if (todaySched.length === 0) {
+    document.getElementById('todaySchedule').innerHTML = '<p style="color:var(--slate-light);font-size:13px;">本日のスケジュールはありません</p>';
+    if (state.currentUser.type === 'admin') {
+      document.getElementById('todaySchedule').innerHTML += `<button class="btn btn-primary" style="margin-top:12px;" onclick="openScheduleModal()">＋ スケジュールを作成</button>`;
+    }
+  } else {
+    document.getElementById('todaySchedule').innerHTML = `<div class="tableWrap"><table>
+      <thead><tr><th>担当者</th><th>エリア</th><th>メモ</th><th>回答</th></tr></thead>
+      <tbody>${todaySched.map(s => {
+        const staff = state.staff.find(st=>st.id===s.staffId);
+        return `<tr>
+          <td>${staff?.emoji||'👤'} ${staff?.name||'不明'}</td>
+          <td><span class="badge badge-area${s.zoneId}">${AREA_NAMES[s.zoneId]||''}</span></td>
+          <td>${s.note||'-'}</td>
+          <td><span class="badge ${s.response==='ok'?'badge-done':s.response==='ng'?'badge-pending':'badge-skip'}">${s.response==='ok'?'対応可':s.response==='ng'?'対応不可':'未回答'}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  }
+}
+
+// ============================================================
+// FACILITIES
+// ============================================================
+function renderFacilities() {
+  // Genre tabs
+  const genres = [{id:'all',label:'すべて'},{id:'hotel',label:'🏨 ホテル'},{id:'rental',label:'🚗 レンタカー'},{id:'michi',label:'🌳 道の駅・観光'},{id:'other',label:'その他'}];
+  document.getElementById('genreTabs').innerHTML = genres.map(g =>
+    `<div class="genreTab ${state.filterGenre===g.id?'active':''}" onclick="setGenreFilter('${g.id}')">${g.label}</div>`
+  ).join('');
+
+  // Area filter buttons
+  const areas = [{id:'all',label:'すべてのエリア',cls:'areaBtn-all'},...[1,2,3,4,5].map(i=>({id:String(i),label:AREA_NAMES[i],cls:`areaBtn-${i}`}))];
+  document.getElementById('areaFilterBtns').innerHTML = areas.map(a =>
+    `<div class="areaBtn ${a.cls} ${state.filterArea===a.id?'active':''}" onclick="setAreaFilter('${a.id}')">${a.label}</div>`
+  ).join('');
+
+  const q = (document.getElementById('facilSearch')?.value||'').toLowerCase();
+  let facs = state.facilities;
+  if (state.filterGenre !== 'all') facs = facs.filter(f=>f.genre===state.filterGenre);
+  if (state.filterArea !== 'all') facs = facs.filter(f=>f.zone===state.filterArea);
+  if (q) facs = facs.filter(f=>(f.name||'').toLowerCase().includes(q)||(f.address||'').toLowerCase().includes(q));
+
+  const total = facs.length, done = facs.filter(f=>f.status==='done').length, pend = facs.filter(f=>f.status==='pending').length;
+  document.getElementById('facilitiesContainer').innerHTML = `
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+      <span class="badge badge-done">完了 ${done}件</span>
+      <span class="badge badge-pending">未完了 ${pend}件</span>
+      <span class="badge badge-skip">合計 ${total}件</span>
+    </div>
+    <div class="tableWrap">
+      <table>
+        <thead><tr><th>No</th><th>施設名</th><th>エリア</th><th>ジャンル</th><th>住所</th><th>状況</th><th>操作</th></tr></thead>
+        <tbody>${facs.map((f,i) => {
+          const zoneClass = `badge-area${f.zone}`;
+          const statusBadge = f.status==='done'?'<span class="badge badge-done">完了</span>':f.status==='skip'?'<span class="badge badge-skip">不要</span>':'<span class="badge badge-pending">未完了</span>';
+          const genreLabel = {hotel:'🏨 ホテル',rental:'🚗 レンタカー',michi:'🌳 道の駅',other:'その他'}[f.genre]||f.genre;
+          return `<tr>
+            <td style="color:var(--slate-light);font-family:'DM Mono',monospace;">${i+1}</td>
+            <td style="font-weight:600;">${f.name}</td>
+            <td><span class="badge ${zoneClass}">${AREA_NAMES[f.zone]||f.zone}</span></td>
+            <td style="font-size:12px;">${genreLabel}</td>
+            <td style="font-size:12px;color:var(--slate-mid);">${f.address||'-'}</td>
+            <td>${statusBadge}${f.lastDone?`<div style="font-size:10px;color:var(--slate-light);">完了:${f.lastDone}</div>`:''}</td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-outline btn-sm" onclick="editFacility('${f.id}')">編集</button>
+                <button class="btn btn-forest btn-sm" onclick="markFacility('${f.id}','done')">完了</button>
+                <button class="btn btn-coral btn-sm" onclick="markFacility('${f.id}','pending')">未完了</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+function setGenreFilter(g) { state.filterGenre = g; renderFacilities(); }
+function setAreaFilter(a) { state.filterArea = a; renderFacilities(); }
+
+function markFacility(id, status) {
+  const f = state.facilities.find(f=>f.id===id);
+  if (f) {
+    f.status = status;
+    f.lastDone = status === 'done' ? state.today : null;
+    saveState();
+    renderFacilities();
+  }
+}
+
+function openAddFacility() {
+  state.selectedFacilityEdit = null;
+  document.getElementById('facilityModalTitle').textContent = '施設追加';
+  ['fac_name','fac_area1','fac_area2','fac_address','fac_tel'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('fac_genre').value='hotel';
+  document.getElementById('fac_rack').value='ラック';
+  document.getElementById('fac_zone').value='1';
+  openModal('facilityModal');
+}
+
+function editFacility(id) {
+  const f = state.facilities.find(f=>f.id===id);
+  if (!f) return;
+  state.selectedFacilityEdit = id;
+  document.getElementById('facilityModalTitle').textContent = '施設編集';
+  document.getElementById('fac_name').value = f.name||'';
+  document.getElementById('fac_area1').value = f.area1||'';
+  document.getElementById('fac_area2').value = f.area2||'';
+  document.getElementById('fac_address').value = f.address||'';
+  document.getElementById('fac_tel').value = f.tel||'';
+  document.getElementById('fac_genre').value = f.genre||'hotel';
+  document.getElementById('fac_rack').value = f.rack||'ラック';
+  document.getElementById('fac_zone').value = f.zone||'1';
+  openModal('facilityModal');
+}
+
+function saveFacility() {
+  const data = {
+    name: document.getElementById('fac_name').value.trim(),
+    area1: document.getElementById('fac_area1').value.trim(),
+    area2: document.getElementById('fac_area2').value.trim(),
+    address: document.getElementById('fac_address').value.trim(),
+    tel: document.getElementById('fac_tel').value.trim(),
+    genre: document.getElementById('fac_genre').value,
+    rack: document.getElementById('fac_rack').value,
+    zone: document.getElementById('fac_zone').value,
+  };
+  if (!data.name) { alert('施設名を入力してください'); return; }
+  if (state.selectedFacilityEdit) {
+    const f = state.facilities.find(f=>f.id===state.selectedFacilityEdit);
+    if (f) Object.assign(f, data);
+  } else {
+    state.facilities.push({id:'f'+Date.now(), ...data, status:'pending', lastDone:null});
+  }
+  saveState(); closeModal('facilityModal'); renderFacilities();
+}
+
+// ============================================================
+// STAFF
+// ============================================================
+function renderStaff() {
+  document.getElementById('staffGrid').innerHTML = state.staff.map(s => {
+    const colors = ['#0099cc','#ff6b4a','#2d7a4f','#7e22ce','#f59e0b'];
+    const zone = s.zone || '';
+    return `<div class="staffCard">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div class="staffAvatar" style="background:${colors[(parseInt(s.id.replace(/\D/,''))||0)%5]}22;font-size:24px;">${s.emoji||'👤'}</div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-outline btn-sm" onclick="editStaff('${s.id}')">編集</button>
+          <button class="btn btn-coral btn-sm" onclick="deleteStaff('${s.id}')">削除</button>
+        </div>
+      </div>
+      <div class="staffName">${s.name}</div>
+      <div class="staffMeta">📱 PIN: ${'*'.repeat(4)} | 🚗 ${s.car||'未設定'}</div>
+      <div class="staffMeta">⛽ ${s.fuel||0}km/L</div>
+      <div style="margin-top:10px;">
+        <span class="badge badge-area${zone||'1'}">${AREA_NAMES[zone]||'エリア未設定'}</span>
+      </div>
+      <div class="staffStatus">
+        <div class="statusDot ${s.online?'online':'offline'}"></div>
+        <span style="color:var(--slate-mid)">${s.online?'稼働中':'オフライン'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openAddStaff() {
+  state.selectedStaffEdit = null;
+  ['st_name','st_pin','st_car','st_fuel','st_emoji'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('st_zone').value='1';
+  openModal('staffModal');
+}
+
+function editStaff(id) {
+  const s = state.staff.find(s=>s.id===id);
+  if (!s) return;
+  state.selectedStaffEdit = id;
+  document.getElementById('st_name').value = s.name||'';
+  document.getElementById('st_pin').value = s.pin||'';
+  document.getElementById('st_car').value = s.car||'';
+  document.getElementById('st_fuel').value = s.fuel||'';
+  document.getElementById('st_zone').value = s.zone||'1';
+  document.getElementById('st_emoji').value = s.emoji||'';
+  openModal('staffModal');
+}
+
+function saveStaff() {
+  const data = {
+    name: document.getElementById('st_name').value.trim(),
+    pin: document.getElementById('st_pin').value.trim(),
+    car: document.getElementById('st_car').value.trim(),
+    fuel: parseFloat(document.getElementById('st_fuel').value)||15,
+    zone: document.getElementById('st_zone').value,
+    emoji: document.getElementById('st_emoji').value||'👤',
+  };
+  if (!data.name) { alert('氏名を入力してください'); return; }
+  if (state.selectedStaffEdit) {
+    const s = state.staff.find(s=>s.id===state.selectedStaffEdit);
+    if (s) Object.assign(s, data);
+  } else {
+    state.staff.push({id:'s'+Date.now(), ...data, online:false});
+  }
+  saveState(); closeModal('staffModal'); renderStaff();
+}
+
+function deleteStaff(id) {
+  if (!confirm('この担当者を削除しますか？')) return;
+  state.staff = state.staff.filter(s=>s.id!==id);
+  saveState(); renderStaff();
+}
+
+// ============================================================
+// SCHEDULE
+// ============================================================
+function renderSchedule() {
+  const isAdmin = state.currentUser.type === 'admin';
+  const html = isAdmin ? renderAdminSchedule() : renderStaffSchedule();
+  document.getElementById('scheduleContent').innerHTML = html;
+  if (isAdmin) {
+    // Populate staff select in modal
+    const sel = document.getElementById('sch_staff');
+    sel.innerHTML = state.staff.map(s => `<option value="${s.id}">${s.emoji||'👤'} ${s.name}</option>`).join('');
+  }
+}
+
+function renderAdminSchedule() {
+  const sorted = [...state.schedules].sort((a,b)=>a.date>b.date?-1:1);
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+      <button class="btn btn-primary" onclick="openScheduleModal()">＋ 配達指示を送る</button>
+    </div>
+    <div class="card">
+      <div class="cardTitle">配達スケジュール一覧</div>
+      ${sorted.length===0 ? '<p style="color:var(--slate-light);font-size:13px;">スケジュールなし</p>' :
+      `<div class="tableWrap"><table>
+        <thead><tr><th>配達日</th><th>担当者</th><th>エリア</th><th>メモ</th><th>回答</th><th>操作</th></tr></thead>
+        <tbody>${sorted.map(s => {
+          const staff = state.staff.find(st=>st.id===s.staffId);
+          return `<tr>
+            <td style="font-family:'DM Mono',monospace;">${s.date}</td>
+            <td>${staff?.emoji||'👤'} ${staff?.name||'不明'}</td>
+            <td><span class="badge badge-area${s.zoneId}">${AREA_NAMES[s.zoneId]||''}</span></td>
+            <td>${s.note||'-'}</td>
+            <td><span class="badge ${s.response==='ok'?'badge-done':s.response==='ng'?'badge-pending':'badge-skip'}">${s.response==='ok'?'対応可':s.response==='ng'?'対応不可':'未回答'}</span></td>
+            <td><button class="btn btn-coral btn-sm" onclick="deleteSchedule('${s.id}')">削除</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`}
+    </div>`;
+}
+
+function renderStaffSchedule() {
+  const uid = state.currentUser.id;
+  const my = state.schedules.filter(s=>s.staffId===uid).sort((a,b)=>a.date>b.date?1:-1);
+  return `
+    <div class="card">
+      <div class="cardTitle">自分への配達指示</div>
+      ${my.length===0 ? '<p style="color:var(--slate-light);font-size:13px;">指示なし</p>' :
+      `<div class="facilityList">${my.map(s => {
+        const responded = s.response && s.response !== '';
+        return `<div class="facilityCard ${s.response==='ok'?'done':s.response==='ng'?'pending':''}">
+          <div class="fcTop">
+            <div>
+              <div class="fcName">📅 ${s.date}</div>
+              <div class="fcMeta">
+                <span class="fcTag"><span class="badge badge-area${s.zoneId}">${AREA_NAMES[s.zoneId]||''}</span></span>
+                ${s.note?`<span class="fcTag">📝 ${s.note}</span>`:''}
+              </div>
+            </div>
+            <span class="badge ${s.response==='ok'?'badge-done':s.response==='ng'?'badge-pending':'badge-skip'}">${s.response==='ok'?'対応可':s.response==='ng'?'対応不可':'未回答'}</span>
+          </div>
+          ${!responded ? `<div class="fcActions">
+            <button class="btn btn-forest btn-sm" onclick="respondSchedule('${s.id}','ok')">✅ 対応可</button>
+            <button class="btn btn-coral btn-sm" onclick="respondSchedule('${s.id}','ng')">❌ 対応不可</button>
+          </div>` : ''}
+        </div>`;
+      }).join('')}</div>`}
+    </div>`;
+}
+
+function openScheduleModal() {
+  const sel = document.getElementById('sch_staff');
+  sel.innerHTML = state.staff.map(s => `<option value="${s.id}">${s.emoji||'👤'} ${s.name}</option>`).join('');
+  document.getElementById('sch_date').value = state.today;
+  document.getElementById('sch_note').value = '';
+  openModal('scheduleModal');
+}
+
+function saveSchedule() {
+  const staffId = document.getElementById('sch_staff').value;
+  const date = document.getElementById('sch_date').value;
+  const zoneId = document.getElementById('sch_zone').value;
+  const note = document.getElementById('sch_note').value;
+  if (!staffId || !date) { alert('担当者と日付を選択してください'); return; }
+  state.schedules.push({id:'sc'+Date.now(), staffId, date, zoneId, note, response:''});
+  addNotif(`スケジュール指示を送りました（${date}）`);
+  saveState(); closeModal('scheduleModal'); renderSchedule();
+}
+
+function deleteSchedule(id) {
+  state.schedules = state.schedules.filter(s=>s.id!==id);
+  saveState(); renderSchedule();
+}
+
+function respondSchedule(id, response) {
+  const s = state.schedules.find(s=>s.id===id);
+  if (s) { s.response = response; saveState(); renderSchedule(); }
+}
+
+// ============================================================
+// DELIVERY (Staff)
+// ============================================================
+function renderDelivery() {
+  const uid = state.currentUser.id;
+  const staff = state.staff.find(s=>s.id===uid);
+  const zone = staff?.zone;
+  const todaySched = state.schedules.find(s=>s.staffId===uid && s.date===state.today);
+  const activeZone = todaySched?.zoneId || zone;
+
+  const zoneFacs = state.facilities.filter(f => f.zone === activeZone);
+  const pendingFacs = zoneFacs.filter(f => f.status !== 'done');
+  
+  // Find active delivery log
+  const todayDelivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
+
+  let html = '';
+  if (!todayDelivery || !todayDelivery.started) {
+    html += `<div class="alert alert-info">本日の担当エリア: <strong>${AREA_NAMES[activeZone]||'未設定'}</strong> / 巡回施設: <strong>${pendingFacs.length}件</strong></div>
+    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+      <button class="btn btn-forest btn-lg" onclick="openModal('startDeliveryModal')">🚗 配達を開始する</button>
+    </div>`;
+  } else if (todayDelivery.started && !todayDelivery.ended) {
+    const completed = (todayDelivery.reports||[]).filter(r=>r.status==='done').length;
+    html += `<div class="alert alert-info">🚗 配達中 | 完了: <strong>${completed}</strong>/${pendingFacs.length}件
+      <button class="btn btn-coral btn-sm" style="margin-left:12px;" onclick="openModal('endDeliveryModal')">🏁 配達終了</button>
+    </div>`;
+  } else {
+    html += `<div class="alert alert-info">🏁 本日の配達完了！ お疲れ様でした。</div>`;
+  }
+
+  html += `<div class="facilityList">${pendingFacs.map(f => {
+    const rep = todayDelivery?.reports?.find(r=>r.facId===f.id);
+    const statusClass = rep ? (rep.status==='done'?'done':rep.status==='skip'?'skip':'pending') : '';
+    return `<div class="facilityCard ${statusClass}">
+      <div class="fcTop">
+        <div>
+          <div class="fcName">${f.name}</div>
+          <div class="fcMeta">
+            <span class="fcTag">📍 ${f.area2||f.area1}</span>
+            <span class="fcTag badge badge-area${f.zone}">${AREA_NAMES[f.zone]||''}</span>
+            <span class="fcTag">🔧 ${f.rack}</span>
+          </div>
+          ${f.address?`<div class="fcTag" style="margin-top:4px;">📮 ${f.address}</div>`:''}
+        </div>
+        ${rep ? `<div class="completeCheckAnim">${rep.status==='done'?'✓':rep.status==='skip'?'→':'✗'}</div>` : ''}
+      </div>
+      <div class="fcActions">
+        <button class="btn btn-primary btn-sm" onclick="openCheckIn('${f.id}')">📝 報告</button>
+        <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.address||f.name+' 沖縄')}" target="_blank" class="btn btn-outline btn-sm">🗺️ MAP</a>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+
+  document.getElementById('deliveryContent').innerHTML = html;
+}
+
+function startDelivery() {
+  const uid = state.currentUser.id;
+  const startKm = document.getElementById('startKm').value;
+  const startTime = document.getElementById('startTime').value;
+  const existing = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
+  if (existing) {
+    existing.started = true;
+    existing.startKm = startKm;
+    existing.startTime = startTime;
+  } else {
+    state.deliveries.push({id:'d'+Date.now(), staffId:uid, date:state.today, started:true, ended:false, startKm, startTime, endKm:'', endTime:'', reports:[], tollPhotos:[]});
+  }
+  const staffIdx = state.staff.findIndex(s=>s.id===uid);
+  if (staffIdx>=0) state.staff[staffIdx].online = true;
+  addNotif(`${state.currentUser.name} が配達を開始しました`);
+  saveState(); closeModal('startDeliveryModal'); renderDelivery();
+}
+
+function endDelivery() {
+  const uid = state.currentUser.id;
+  const endKm = document.getElementById('endKm').value;
+  const endTime = document.getElementById('endTime').value;
+  const delivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
+  if (delivery) {
+    delivery.ended = true;
+    delivery.endKm = endKm;
+    delivery.endTime = endTime;
+  }
+  const staffIdx = state.staff.findIndex(s=>s.id===uid);
+  if (staffIdx>=0) state.staff[staffIdx].online = false;
+  addNotif(`${state.currentUser.name} が配達を完了しました`);
+  saveState(); closeModal('endDeliveryModal'); renderDelivery();
+}
+
+function openCheckIn(facId) {
+  state.checkInFacId = facId;
+  state.checkInStatus = null;
+  const f = state.facilities.find(f=>f.id===facId);
+  document.getElementById('checkInTitle').textContent = `📝 ${f?.name||'施設'} 報告`;
+  document.getElementById('checkInNote').value = '';
+  document.getElementById('statusSelected').textContent = '未選択';
+  document.getElementById('rackPhotos').innerHTML = '';
+  document.getElementById('receiptPhotos').innerHTML = '';
+  openModal('checkInModal');
+}
+
+function setStatus(s) {
+  state.checkInStatus = s;
+  const labels = {done:'✅ 補充完了',skip:'⏭️ 補充不要',pending:'❌ 未完了'};
+  document.getElementById('statusSelected').textContent = labels[s]||s;
+}
+
+function saveCheckIn() {
+  if (!state.checkInStatus) { alert('補充状況を選択してください'); return; }
+  const uid = state.currentUser.id;
+  let delivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
+  if (!delivery) {
+    delivery = {id:'d'+Date.now(), staffId:uid, date:state.today, started:true, ended:false, reports:[]};
+    state.deliveries.push(delivery);
+  }
+  if (!delivery.reports) delivery.reports = [];
+  const existing = delivery.reports.findIndex(r=>r.facId===state.checkInFacId);
+  const rep = {facId:state.checkInFacId, status:state.checkInStatus, note:document.getElementById('checkInNote').value};
+  if (existing >= 0) delivery.reports[existing] = rep;
+  else delivery.reports.push(rep);
+
+  // Update facility status
+  const f = state.facilities.find(f=>f.id===state.checkInFacId);
+  if (f) {
+    f.status = state.checkInStatus;
+    if (state.checkInStatus === 'done') f.lastDone = state.today;
+  }
+  saveState(); closeModal('checkInModal'); renderDelivery();
+}
+
+// ============================================================
+// ROUTE
+// ============================================================
+function renderRoute() {
+  const isAdmin = state.currentUser.type === 'admin';
+  let zoneId = isAdmin ? '1' : (state.staff.find(s=>s.id===state.currentUser.id)?.zone || '1');
+  const facs = state.facilities.filter(f=>f.zone===zoneId && f.status!=='done');
+  
+  document.getElementById('routeContent').innerHTML = `
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div class="formGroup">
+          <label class="formLabel">エリア選択</label>
+          <select class="formSelect" id="routeZone" onchange="renderRoute()">
+            ${[1,2,3,4,5].map(z=>`<option value="${z}" ${zoneId===String(z)?'selected':''}>${AREA_NAMES[z]}</option>`).join('')}
+          </select>
+        </div>
+        <div style="align-self:flex-end;">
+          <a href="${buildGoogleMapsUrl(facs)}" target="_blank" class="btn btn-primary">🗺️ Googleマップで開く</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardTitle">📍 巡回ルート（未完了施設 ${facs.length}件）</div>
+      <div class="routeList">
+        ${facs.map((f,i) => `
+          <div class="routeItem">
+            <div class="routeLine">
+              <div class="routeDot" style="background:${i===0?'var(--forest)':i===facs.length-1?'var(--coral)':'var(--ocean)'}"></div>
+              ${i < facs.length-1 ? '<div class="routeConnector"></div>' : ''}
+            </div>
+            <div class="routeInfo">
+              <div class="routeName">${i+1}. ${f.name}</div>
+              <div class="routeAddr">${f.address||f.area2||''} · <span class="badge badge-area${f.zone}" style="font-size:10px;">${AREA_NAMES[f.zone]||''}</span></div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function buildGoogleMapsUrl(facs) {
+  if (facs.length === 0) return 'https://maps.google.com';
+  const addresses = facs.slice(0,10).map(f=>encodeURIComponent(f.address||f.name));
+  if (addresses.length === 1) return `https://www.google.com/maps/search/?api=1&query=${addresses[0]}`;
+  const origin = addresses[0];
+  const dest = addresses[addresses.length-1];
+  const waypoints = addresses.slice(1,-1).join('|');
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
+  if (waypoints) url += `&waypoints=${waypoints}`;
+  return url;
+}
+
+// ============================================================
+// REPORTS
+// ============================================================
+function renderReports() {
+  const uid = state.currentUser.id;
+  const isAdmin = state.currentUser.type === 'admin';
+  const deliveries = isAdmin ? state.deliveries : state.deliveries.filter(d=>d.staffId===uid);
+  const sorted = [...deliveries].sort((a,b)=>a.date>b.date?-1:1);
+
+  document.getElementById('reportsContent').innerHTML = `
+    <div class="card">
+      <div class="cardTitle">日報一覧</div>
+      ${sorted.length===0 ? '<p style="color:var(--slate-light);font-size:13px;">日報なし</p>' :
+      sorted.map(d => {
+        const staff = state.staff.find(s=>s.id===d.staffId);
+        const reports = d.reports||[];
+        const done = reports.filter(r=>r.status==='done').length;
+        const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
+        const staffObj = staff;
+        const fuelCost = staffObj ? Math.round(km / (staffObj.fuel||15) * FUEL_PRICE) : 0;
+        const zone = state.schedules.find(s=>s.staffId===d.staffId&&s.date===d.date)?.zoneId || staffObj?.zone;
+        return `<div class="facilityCard" style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-weight:700;font-size:15px;">📅 ${d.date}</div>
+              <div style="font-size:13px;color:var(--slate-mid);margin-top:4px;">${staff?.emoji||'👤'} ${staff?.name||'不明'} ／ <span class="badge badge-area${zone||'1'}">${AREA_NAMES[zone]||''}</span></div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="printReport('${d.id}')">🖨️ PDF出力</button>
+          </div>
+          <div class="separator"></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+            <div class="infoRow"><span class="infoLabel">出発</span><span class="infoVal">${d.startTime||'-'}</span></div>
+            <div class="infoRow"><span class="infoLabel">終了</span><span class="infoVal">${d.endTime||'-'}</span></div>
+            <div class="infoRow"><span class="infoLabel">走行距離</span><span class="infoVal">${km>0?km+'km':'-'}</span></div>
+            <div class="infoRow"><span class="infoLabel">燃料費</span><span class="infoVal">${fuelCost>0?'¥'+fuelCost.toLocaleString():'-'}</span></div>
+            <div class="infoRow"><span class="infoLabel">配布完了</span><span class="infoVal">${done}件</span></div>
+          </div>
+          ${reports.length>0 ? `
+          <div style="margin-top:12px;">
+            <div class="genreTabs" id="genreTabReport_${d.id}">
+              <div class="genreTab active" onclick="filterReport('${d.id}','all',this)">すべて</div>
+              <div class="genreTab" onclick="filterReport('${d.id}','hotel',this)">🏨 ホテル</div>
+              <div class="genreTab" onclick="filterReport('${d.id}','rental',this)">🚗 レンタカー</div>
+              <div class="genreTab" onclick="filterReport('${d.id}','michi',this)">🌳 道の駅</div>
+            </div>
+            <div id="reportFacs_${d.id}" class="tableWrap">
+              ${buildReportTable(reports, 'all')}
+            </div>
+          </div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function buildReportTable(reports, genre) {
+  const filtered = reports.filter(r => {
+    const f = state.facilities.find(f=>f.id===r.facId);
+    return genre==='all' || f?.genre===genre;
+  });
+  if (filtered.length===0) return '<p style="color:var(--slate-light);font-size:13px;padding:12px;">なし</p>';
+  return `<table><thead><tr><th>施設名</th><th>ジャンル</th><th>エリア</th><th>状況</th><th>メモ</th></tr></thead>
+  <tbody>${filtered.map(r=>{
+    const f = state.facilities.find(f=>f.id===r.facId);
+    return `<tr>
+      <td style="font-weight:600;">${f?.name||r.facId}</td>
+      <td style="font-size:12px;">${{hotel:'🏨',rental:'🚗',michi:'🌳'}[f?.genre]||''}</td>
+      <td><span class="badge badge-area${f?.zone||'1'}">${AREA_NAMES[f?.zone]||''}</span></td>
+      <td><span class="badge ${r.status==='done'?'badge-done':r.status==='skip'?'badge-skip':'badge-pending'}">${r.status==='done'?'完了':r.status==='skip'?'不要':'未完了'}</span></td>
+      <td style="font-size:12px;color:var(--slate-mid);">${r.note||'-'}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function filterReport(delivId, genre, btn) {
+  btn.closest('.genreTabs').querySelectorAll('.genreTab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  const delivery = state.deliveries.find(d=>d.id===delivId);
+  document.getElementById(`reportFacs_${delivId}`).innerHTML = buildReportTable(delivery?.reports||[], genre);
+}
+
+function printReport(delivId) {
+  const d = state.deliveries.find(d=>d.id===delivId);
+  if (!d) return;
+  const staff = state.staff.find(s=>s.id===d.staffId);
+  const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
+  const fuelCost = staff ? Math.round(km/(staff.fuel||15)*FUEL_PRICE) : 0;
+  const zone = state.schedules.find(s=>s.staffId===d.staffId&&s.date===d.date)?.zoneId || staff?.zone;
+  const reports = d.reports||[];
+  const done = reports.filter(r=>r.status==='done');
+
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+  <title>日報 ${d.date}</title>
+  <style>
+    body{font-family:'Noto Sans JP',sans-serif;padding:40px;color:#1e293b;max-width:800px;margin:0 auto;}
+    h1{font-size:22px;margin-bottom:4px;color:#005f7f;}
+    .sub{color:#94a3b8;font-size:13px;margin-bottom:24px;}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;}
+    .box{border:1px solid #e2e8f0;border-radius:8px;padding:16px;}
+    .bl{font-size:12px;color:#94a3b8;}
+    .bv{font-size:20px;font-weight:700;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th{background:#f8fafc;padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;}
+    td{padding:8px 12px;border-bottom:1px solid #e2e8f0;}
+    .done{color:#2d7a4f;font-weight:600;}
+    .pending{color:#ff6b4a;}
+    @media print{body{padding:20px}}
+  </style>
+  </head><body>
+  <h1>📋 配布業務 日報</h1>
+  <div class="sub">${d.date} / ${staff?.name||'不明'} / ${AREA_NAMES[zone]||''}</div>
+  <div class="grid">
+    <div class="box"><div class="bl">出発時刻</div><div class="bv">${d.startTime||'-'}</div></div>
+    <div class="box"><div class="bl">終了時刻</div><div class="bv">${d.endTime||'-'}</div></div>
+    <div class="box"><div class="bl">走行距離</div><div class="bv">${km>0?km+'km':'-'}</div></div>
+    <div class="box"><div class="bl">燃料費概算</div><div class="bv">${fuelCost>0?'¥'+fuelCost.toLocaleString():'-'}</div></div>
+    <div class="box"><div class="bl">車両ナンバー</div><div class="bv" style="font-size:14px;">${staff?.car||'-'}</div></div>
+    <div class="box"><div class="bl">配布完了</div><div class="bv">${done.length}件</div></div>
+  </div>
+  <h2 style="font-size:16px;margin-bottom:12px;">巡回施設</h2>
+  <table>
+    <thead><tr><th>施設名</th><th>ジャンル</th><th>エリア</th><th>状況</th><th>メモ</th></tr></thead>
+    <tbody>${reports.map(r=>{
+      const f = state.facilities.find(f=>f.id===r.facId);
+      return `<tr>
+        <td><strong>${f?.name||r.facId}</strong></td>
+        <td>${{hotel:'ホテル',rental:'レンタカー',michi:'道の駅・観光'}[f?.genre]||''}</td>
+        <td>${AREA_NAMES[f?.zone]||''}</td>
+        <td class="${r.status==='done'?'done':'pending'}">${r.status==='done'?'✓ 完了':r.status==='skip'?'→ 補充不要':'✗ 未完了'}</td>
+        <td>${r.note||''}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>
+  <div style="margin-top:32px;color:#94a3b8;font-size:11px;border-top:1px solid #e2e8f0;padding-top:12px;">
+    出力日時: ${new Date().toLocaleString('ja-JP')} ／ パンフレット配布管理システム
+  </div>
+  <script>window.onload=()=>window.print()<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// AVAILABILITY (Staff)
+// ============================================================
+function renderAvailability() {
+  const uid = state.currentUser.id;
+  if (!state.availability[uid]) state.availability[uid] = {};
+  const av = state.availability[uid];
+
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const monthStr = `${year}年${month+1}月`;
+
+  const days = ['日','月','火','水','木','金','土'];
+
+  let calHtml = `<div class="calHeader">${days.map(d=>`<div class="calDayLabel">${d}</div>`).join('')}</div><div class="calGrid">`;
+  for (let i=0; i<firstDay; i++) calHtml += '<div></div>';
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = dateStr === state.today;
+    const val = av[dateStr];
+    const cls = isToday ? 'today' : val==='available' ? 'available' : val==='unavailable' ? 'unavailable' : '';
+    calHtml += `<div class="calDay ${cls}" onclick="toggleAvail('${dateStr}')">${d}</div>`;
+  }
+  calHtml += '</div>';
+
+  // My schedules for this period
+  const myScheds = state.schedules.filter(s=>s.staffId===uid);
+
+  document.getElementById('availContent').innerHTML = `
+    <div class="twoCol">
+      <div class="card">
+        <div class="cardTitle">📆 ${monthStr} 出勤可能日</div>
+        <div class="alert alert-info" style="margin-bottom:12px;">
+          タップして 🟢 出勤可 ／ 🔴 不可 を切り替えてください
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:4px;font-size:12px;"><div style="width:12px;height:12px;border-radius:50%;background:var(--forest);"></div>出勤可</div>
+          <div style="display:flex;align-items:center;gap:4px;font-size:12px;"><div style="width:12px;height:12px;border-radius:50%;background:var(--coral);"></div>不可</div>
+          <div style="display:flex;align-items:center;gap:4px;font-size:12px;"><div style="width:12px;height:12px;border-radius:50%;background:var(--ocean);"></div>今日</div>
+        </div>
+        ${calHtml}
+      </div>
+      <div class="card">
+        <div class="cardTitle">📋 配達指示</div>
+        ${myScheds.length===0 ? '<p style="color:var(--slate-light);font-size:13px;">配達指示なし</p>' :
+        `<div class="facilityList">${myScheds.sort((a,b)=>a.date>b.date?1:-1).map(s => `
+          <div class="facilityCard ${s.response==='ok'?'done':s.response==='ng'?'pending':''}">
+            <div class="fcTop">
+              <div>
+                <div class="fcName">📅 ${s.date}</div>
+                <div class="fcMeta"><span class="badge badge-area${s.zoneId}">${AREA_NAMES[s.zoneId]||''}</span></div>
+              </div>
+              <span class="badge ${s.response==='ok'?'badge-done':s.response==='ng'?'badge-pending':'badge-skip'}">${s.response==='ok'?'対応可':s.response==='ng'?'対応不可':'未回答'}</span>
+            </div>
+            ${!s.response ? `<div class="fcActions">
+              <button class="btn btn-forest btn-sm" onclick="respondSchedule('${s.id}','ok');renderAvailability()">✅ 対応可</button>
+              <button class="btn btn-coral btn-sm" onclick="respondSchedule('${s.id}','ng');renderAvailability()">❌ 対応不可</button>
+            </div>` : ''}
+          </div>`).join('')}</div>`}
+      </div>
+    </div>`;
+}
+
+function toggleAvail(dateStr) {
+  const uid = state.currentUser.id;
+  if (!state.availability[uid]) state.availability[uid] = {};
+  const cur = state.availability[uid][dateStr];
+  state.availability[uid][dateStr] = cur==='available' ? 'unavailable' : cur==='unavailable' ? '' : 'available';
+  saveState(); renderAvailability();
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function addNotif(text) {
+  state.notifications.unshift({id:'n'+Date.now(), text, time:new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}), unread:true});
+  if (state.notifications.length > 20) state.notifications.pop();
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function addPhoto(input, containerId) {
+  const container = document.getElementById(containerId);
+  Array.from(input.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const div = document.createElement('div');
+      div.className = 'photoThumb';
+      div.innerHTML = `<img src="${e.target.result}" alt="photo"><button class="del" onclick="this.parentElement.remove()">✕</button>`;
+      container.appendChild(div);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ============================================================
+// INIT
+// ============================================================
+loadState();
+setupPinInputs();
+document.getElementById('startTime').value = new Date().toTimeString().slice(0,5);
+document.getElementById('endTime').value = new Date().toTimeString().slice(0,5);
+setLoginType('admin');
+</script>
+</body>
+</html>
