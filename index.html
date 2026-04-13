@@ -573,6 +573,55 @@ input[type=file] { display:none; }
   </div>
 </div>
 
+
+<div class="modal-overlay" id="editScheduleModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">📅 配達指示を編集</div>
+      <button class="modal-close" onclick="closeModal('editScheduleModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="formGrid">
+        <div class="formGroup"><label class="formLabel">配達日</label><input class="formInput" type="date" id="edit_sch_date"></div>
+        <div class="formGroup"><label class="formLabel">担当者</label><select class="formSelect" id="edit_sch_staff"></select></div>
+        <div class="formGroup">
+          <label class="formLabel">エリア</label>
+          <select class="formSelect" id="edit_sch_zone">
+            <option value="1">エリア1 (那覇市)</option>
+            <option value="2">エリア2 (南部)</option>
+            <option value="3">エリア3 (中部)</option>
+            <option value="4">エリア4 (北部・恩納)</option>
+            <option value="5">エリア5 (名護・本部)</option>
+          </select>
+        </div>
+        <div class="formGroup"><label class="formLabel">メモ</label><input class="formInput" id="edit_sch_note" placeholder="特記事項"></div>
+      </div>
+      <div class="formGroup" style="margin-top:8px;">
+        <label class="formLabel">🎯 優先条件</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label style="font-size:13px;color:var(--slate);">訪問回数</label>
+          <input class="formInput" type="number" id="edit_sch_priority_num" min="0" max="99" placeholder="例: 2" style="width:80px;text-align:center;" oninput="updateEditSchPriorityPreview()">
+          <label style="font-size:13px;color:var(--slate);">回以下を優先</label>
+          <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('edit_sch_priority_num').value='';updateEditSchPriorityPreview()">指定なし</button>
+        </div>
+        <div id="editSchPriorityPreview" style="margin-top:6px;font-size:12px;color:var(--slate-mid);"></div>
+      </div>
+      <div class="formGroup" style="margin-top:8px;">
+        <label class="formLabel">配布業種</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;" id="editSchGenreButtons">
+          <button type="button" class="btn btn-primary btn-sm edit-genre-btn active" data-genre="all" onclick="toggleEditSchGenre(this)">すべて</button>
+          <button type="button" class="btn btn-outline btn-sm edit-genre-btn" data-genre="hotel" onclick="toggleEditSchGenre(this)">ホテル</button>
+          <button type="button" class="btn btn-outline btn-sm edit-genre-btn" data-genre="rental" onclick="toggleEditSchGenre(this)">レンタカー</button>
+          <button type="button" class="btn btn-outline btn-sm edit-genre-btn" data-genre="michi" onclick="toggleEditSchGenre(this)">道の駅・観光</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('editScheduleModal')">キャンセル</button>
+      <button class="btn btn-primary" id="saveEditSchedBtn" onclick="saveEditSchedule()">保存する</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="startDeliveryModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="1" y="9" width="22" height="11" rx="3" fill="#054c9c"/><path d="M5 9l2-5h10l2 5" fill="#054c9c" opacity="0.5"/><circle cx="7" cy="20" r="2.5" fill="white" stroke="#054c9c" stroke-width="1.5"/><circle cx="17" cy="20" r="2.5" fill="white" stroke="#054c9c" stroke-width="1.5"/></svg>配達開始</div><button class="modal-close" onclick="closeModal('startDeliveryModal')">✕</button></div>
@@ -1021,6 +1070,7 @@ let state = {
   filterArea: 'all',
   filterGenre: 'all',
   facilSort: 'default',
+  deliverySort: 'visit_asc',
   fuelPrice: 170,
   selectedFacilityEdit: null,
   selectedStaffEdit: null,
@@ -1877,7 +1927,7 @@ function renderAdminSchedule() {
         const prioIcons = ['🔴','🟡','🔵','🟢','⚪','⚪'];
         const prioN = parseInt(prio);
         const prioDisp = (prio!=='none' && !isNaN(prioN)) ? `<span style="font-size:11px;font-weight:600;">${prioIcons[Math.min(prioN,5)]} ${prioN}回以下優先</span>` : '<span style="font-size:11px;color:var(--slate-light);">-</span>';
-        return `<tr style="${inRange?'':'opacity:0.35;'}"><td style="font-family:'DM Mono',monospace;">${s.date}</td><td>${staff?.emoji||'👤'} ${staff?.name||'不明'}</td><td><span class="badge badge-area${s.zoneId}">${AREA_NAMES[s.zoneId]||''}</span></td><td>${genreBadge}</td><td>${prioDisp}</td><td>${s.note||'-'}</td><td><span class="badge ${s.response==='ok'?'badge-done':s.response==='ng'?'badge-pending':'badge-skip'}">${s.response==='ok'?'対応可':s.response==='ng'?'対応不可':'未回答'}</span></td><td><button class="btn btn-coral btn-sm" onclick="deleteSchedule('${s.id}')">削除</button></td></tr>`;
+        return `<tr style="${inRange?'':'opacity:0.35;'}"><td style="font-family:'DM Mono',monospace;">${s.date}</td><td>${staff?.emoji||'👤'} ${staff?.name||'不明'}</td><td><span class="badge badge-area${s.zoneId}">${AREA_NAMES[s.zoneId]||''}</span></td><td>${genreBadge}</td><td>${prioDisp}</td><td>${s.note||'-'}</td><td><span class="badge ${s.response==='ok'?'badge-done':s.response==='ng'?'badge-pending':'badge-skip'}">${s.response==='ok'?'対応可':s.response==='ng'?'対応不可':'未回答'}</span></td><td><div style="display:flex;gap:4px;"><button class="btn btn-outline btn-sm" onclick="openEditSchedule('${s.id}')">編集</button><button class="btn btn-coral btn-sm" onclick="deleteSchedule('${s.id}')">削除</button></div></td></tr>`;
       }).join('')}</tbody></table></div>`}
     </div>`;
 }
@@ -2093,6 +2143,86 @@ async function saveSchedule() {
   renderSchedule();
 }
 
+
+// ============================================================
+// スケジュール編集
+// ============================================================
+let editingScheduleId = null;
+
+function updateEditSchPriorityPreview() {
+  const val = document.getElementById('edit_sch_priority_num')?.value;
+  const preview = document.getElementById('editSchPriorityPreview');
+  if (!preview) return;
+  if (val === '' || isNaN(parseInt(val))) { preview.textContent = ''; return; }
+  const n = parseInt(val);
+  const icons = ['🔴','🟡','🔵','🟢','⚪'];
+  preview.textContent = n === 0 ? `${icons[0]} 一度も訪問していない施設のみを優先します` : `${icons[Math.min(n,4)]} 訪問${n}回以下の施設を優先します`;
+}
+
+function toggleEditSchGenre(btn) {
+  const genre = btn.dataset.genre;
+  const allBtn = document.querySelector('.edit-genre-btn[data-genre="all"]');
+  const otherBtns = document.querySelectorAll('.edit-genre-btn:not([data-genre="all"])');
+  if (genre === 'all') {
+    document.querySelectorAll('.edit-genre-btn').forEach(b => { b.classList.remove('active','btn-primary'); b.classList.add('btn-outline'); });
+    btn.classList.add('active','btn-primary'); btn.classList.remove('btn-outline');
+  } else {
+    allBtn.classList.remove('active','btn-primary'); allBtn.classList.add('btn-outline');
+    btn.classList.toggle('active'); btn.classList.toggle('btn-primary'); btn.classList.toggle('btn-outline');
+    const anyActive = Array.from(otherBtns).some(b => b.classList.contains('active'));
+    if (!anyActive) { allBtn.classList.add('active','btn-primary'); allBtn.classList.remove('btn-outline'); }
+  }
+}
+
+function openEditSchedule(id) {
+  const s = state.schedules.find(s => s.id === id);
+  if (!s) return;
+  editingScheduleId = id;
+  document.getElementById('edit_sch_date').value = s.date || '';
+  document.getElementById('edit_sch_zone').value = s.zoneId || '1';
+  document.getElementById('edit_sch_note').value = s.note || '';
+  // 担当者
+  const sel = document.getElementById('edit_sch_staff');
+  sel.innerHTML = state.staff.map(st => `<option value="${st.id}" ${st.id===s.staffId?'selected':''}>${st.emoji||'👤'} ${st.name}</option>`).join('');
+  // 優先条件
+  const prioNum = document.getElementById('edit_sch_priority_num');
+  const prio = s.priority||'none';
+  prioNum.value = (prio !== 'none' && !isNaN(parseInt(prio))) ? parseInt(prio) : '';
+  updateEditSchPriorityPreview();
+  // 業種ボタンリセット
+  document.querySelectorAll('.edit-genre-btn').forEach(b => { b.classList.remove('active','btn-primary'); b.classList.add('btn-outline'); });
+  const gf = (() => { try { return JSON.parse(s.genreFilter||'["all"]'); } catch(e){ return ['all']; } })();
+  if (gf.includes('all')) {
+    const ab = document.querySelector('.edit-genre-btn[data-genre="all"]');
+    if (ab) { ab.classList.add('active','btn-primary'); ab.classList.remove('btn-outline'); }
+  } else {
+    gf.forEach(g => {
+      const btn = document.querySelector(`.edit-genre-btn[data-genre="${g}"]`);
+      if (btn) { btn.classList.add('active','btn-primary'); btn.classList.remove('btn-outline'); }
+    });
+  }
+  openModal('editScheduleModal');
+}
+
+async function saveEditSchedule() {
+  const date = document.getElementById('edit_sch_date').value;
+  const staffId = document.getElementById('edit_sch_staff').value;
+  const zoneId = document.getElementById('edit_sch_zone').value;
+  const note = document.getElementById('edit_sch_note').value;
+  const prioNum = document.getElementById('edit_sch_priority_num')?.value;
+  const priority = (prioNum !== '' && !isNaN(parseInt(prioNum))) ? String(parseInt(prioNum)) : 'none';
+  const activeGenres = Array.from(document.querySelectorAll('.edit-genre-btn.active')).map(b => b.dataset.genre);
+  const genres = JSON.stringify(activeGenres.includes('all') || activeGenres.length === 0 ? ['all'] : activeGenres);
+  if (!date || !staffId) { alert('日付と担当者を入力してください'); return; }
+  setBtn('saveEditSchedBtn', true);
+  await sb.from('schedules').update({ date, staff_id: staffId, zone_id: zoneId, note, genres, priority }).eq('id', editingScheduleId);
+  await reloadSchedules();
+  setBtn('saveEditSchedBtn', false);
+  closeModal('editScheduleModal');
+  renderSchedule();
+  alert('✅ スケジュールを更新しました');
+}
+
 async function deleteSchedule(id) {
   await sb.from('schedules').delete().eq('id', id);
   await reloadSchedules();
@@ -2132,15 +2262,14 @@ function renderDelivery() {
     if (activeGenres.includes('all')) return true;
     return activeGenres.includes(f.genre);
   });
-  // 未完了施設を最終配布が古い順にソート（null=一度も配布してない → 最優先）
-  const zoneFacs = allZoneFacs
-    .filter(f => f.status!=='done' && f.status!=='skip')
-    .sort((a, b) => {
-      if (!a.last_done && !b.last_done) return 0;
-      if (!a.last_done) return -1;
-      if (!b.last_done) return 1;
-      return new Date(a.last_done) - new Date(b.last_done);
-    });
+  // ソート
+  const delivSort = state.deliverySort || 'visit_asc';
+  const sortFacs = (facs) => {
+    if (delivSort === 'visit_asc') return [...facs].sort((a,b) => (a.visitCount||0) - (b.visitCount||0));
+    if (delivSort === 'visit_desc') return [...facs].sort((a,b) => (b.visitCount||0) - (a.visitCount||0));
+    return facs;
+  };
+  const zoneFacs = sortFacs(allZoneFacs.filter(f => f.status!=='done' && f.status!=='skip'));
   const todayDelivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
   const todayReports = todayDelivery?.reports || [];
   const completedCount = allZoneFacs.filter(f=>f.status==='done').length;
@@ -2164,11 +2293,20 @@ function renderDelivery() {
     </div>`;
   };
 
+  const sortUI = () => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <span style="font-size:12px;color:var(--slate-mid);font-weight:600;">訪問回数でソート：</span>
+    ${[
+      {id:'visit_asc', label:'少ない順 ▲', desc:'未訪問が上'},
+      {id:'visit_desc', label:'多い順 ▽', desc:'多く訪問済みが上'},
+      {id:'default', label:'デフォルト', desc:''},
+    ].map(s => `<button onclick="state.deliverySort='${s.id}';renderDelivery()" style="padding:5px 11px;border-radius:100px;border:1.5px solid ${(state.deliverySort||'visit_asc')===s.id?'#033a78':'#dce8f8'};background:${(state.deliverySort||'visit_asc')===s.id?'#054c9c':'white'};color:${(state.deliverySort||'visit_asc')===s.id?'white':'#4a5568'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">${s.label}</button>`).join('')}
+  </div>`;
   const genreNames = {hotel:'ホテル',rental:'レンタカー',michi:'道の駅・観光',other:'その他'};
   const genreLabelDisp = activeGenres.includes('all') ? 'すべて' : activeGenres.map(g=>genreNames[g]||g).join('・');
   if (!todayDelivery?.started) {
     html += `<div class="alert alert-info">本日の担当エリア: <strong>${AREA_NAMES[activeZone]||'未設定'}</strong> ／ 対象業種: <strong>${genreLabelDisp}</strong> ／ 巡回施設: <strong>${zoneFacs.length}件</strong></div>
     ${genreFilterUI()}
+    ${sortUI()}
     <div style="display:flex;gap:12px;margin-bottom:20px;">
       <button class="btn btn-forest btn-lg" onclick="document.getElementById('startTime').value=new Date().toTimeString().slice(0,5);openModal('startDeliveryModal')"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="1" y="9" width="22" height="11" rx="3" fill="currentColor"/><path d="M5 9l2-5h10l2 5" fill="currentColor" opacity="0.6"/><circle cx="7" cy="20" r="2.5" fill="white"/><circle cx="17" cy="20" r="2.5" fill="white"/></svg>配達を開始する</span></button>
     </div>`;
@@ -2176,10 +2314,12 @@ function renderDelivery() {
     html += `<div class="alert alert-success" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:3px;"><rect x="1" y="9" width="22" height="11" rx="3" fill="#054c9c"/><path d="M5 9l2-5h10l2 5" fill="#054c9c" opacity="0.5"/><circle cx="7" cy="20" r="2" fill="white"/><circle cx="17" cy="20" r="2" fill="white"/></svg> 配達中 | 完了: <strong>${completedCount}</strong>/${allZoneFacs.length}件
       <button class="btn btn-coral btn-sm" style="margin-left:auto;" onclick="document.getElementById('endTime').value=new Date().toTimeString().slice(0,5);openModal('endDeliveryModal')"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="3" height="18" rx="1" fill="currentColor"/><path d="M5 4h14l-3 5 3 5H5" fill="currentColor" opacity="0.6"/></svg>配達終了</span></button>
     </div>
-    ${genreFilterUI()}`;
+    ${genreFilterUI()}
+    ${sortUI()}`;
   } else {
     html += `<div class="alert alert-success"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/><path d="M7 12l3.5 3.5L17 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>本日の配達完了！お疲れ様でした。</span></div>
-    ${genreFilterUI()}`;
+    ${genreFilterUI()}
+    ${sortUI()}`;
   }
   html += `<div class="facilityList">${allZoneFacs.map(f => {
     const rep = todayReports.find(r=>r.facId===f.id);
@@ -2192,6 +2332,7 @@ function renderDelivery() {
           <div class="fcName" style="display:flex;align-items:center;gap:8px;">
             ${isDone ? '<span style="background:#4aa876;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">✓ 配達済</span>' : ''}
             ${isSkip ? '<span style="background:#94a3b8;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">⏭ 補充不要</span>' : ''}
+            ${(()=>{const vc=f.visitCount||0;const bg=vc===0?'#fee2e2':vc===1?'#fef3c7':vc>=3?'#dcfce7':'#dbeafe';const col=vc===0?'#b91c1c':vc===1?'#92400e':vc>=3?'#166534':'#1e40af';return `<span style="background:${bg};color:${col};font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;">${vc===0?'🔴 未訪問':`🔵 ${vc}回訪問済`}</span>`})()}
             ${f.name}
           </div>
           <div class="fcMeta">
