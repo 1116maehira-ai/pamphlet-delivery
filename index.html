@@ -3153,10 +3153,9 @@ function openReceiveModal(type = 'receive') {
   // 担当者セレクト
   const sel = document.getElementById('recv_staff');
   if (sel) {
-    // 返却時は「会社保管（管理者）」も選択肢に追加
-    const adminOption = isReturn ? '' : '';
     sel.innerHTML = state.staff.map(s=>`<option value="${s.id}">${s.emoji||'👤'} ${s.name}</option>`).join('');
-    if (isReturn && isAdmin) {
+    // 管理者は受け取り・返却どちらでも「👑 管理者」を選択肢に追加
+    if (isAdmin) {
       sel.innerHTML = `<option value="admin">👑 管理者</option>` + sel.innerHTML;
     }
     if (!isAdmin) sel.value = state.currentUser.id;
