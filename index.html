@@ -389,6 +389,11 @@ input[type=file] { display:none; }
     <div class="page" id="page-route"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" fill="#054c9c"/><circle cx="12" cy="10" r="3" fill="white"/></svg>巡回ルート</span></div><div id="routeContent"></div></div>
     <!-- INVENTORY -->
     <div class="page" id="page-inventory"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="20" height="14" rx="2" fill="#054c9c"/><path d="M16 7V5a2 2 0 0 0-4 0v2M8 7V5a2 2 0 0 0-4 0" stroke="#054c9c" stroke-width="1.5"/><path d="M9 13h6M12 10v6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>在庫管理</span></div><div id="inventoryContent"></div></div>
+    <!-- CONTACT -->
+    <div class="page" id="page-contact">
+      <div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" fill="#054c9c"/><path d="M22 6l-10 7L2 6" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>お問い合わせ</span></div>
+      <div id="contactContent"></div>
+    </div>
     <!-- AVAILABILITY -->
     <div class="page" id="page-availability"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="17" rx="2" fill="#054c9c"/><path d="M8 2v4M16 2v4M3 10h18" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M8 15l2.5 2.5L16 12" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>出勤可能日</span></div><div id="availContent"></div></div>
   </div>
@@ -1492,6 +1497,7 @@ const ADMIN_PAGES = [
   {id:'inventory',label:'inventory',text:'在庫管理'},
   {id:'route',label:'route',text:'ルート'},
   {id:'reports',label:'report',text:'日報'},
+  {id:'contact',label:'bell',text:'お問い合わせ'},
 ];
 const STAFF_PAGES = [
   {id:'dashboard',label:'dashboard',text:'ホーム'},
@@ -1501,6 +1507,7 @@ const STAFF_PAGES = [
   {id:'availability',label:'availability',text:'出勤可能日'},
   {id:'route',label:'route',text:'ルート'},
   {id:'reports',label:'report',text:'日報'},
+  {id:'contact',label:'bell',text:'お問い合わせ'},
 ];
 
 function enterApp() {
@@ -1552,6 +1559,7 @@ function renderPage(id) {
     case 'route': renderRoute(); break;
     case 'reports': renderReports(); break;
     case 'availability': renderAvailability(); break;
+    case 'contact': renderContact(); break;
     case 'inventory': renderInventory(); break;
   }
 }
@@ -3313,6 +3321,52 @@ async function saveReceive() {
   setBtn('saveReceiveBtn', false);
   closeModal('receiveModal');
   renderInventory();
+}
+
+
+// ============================================================
+// CONTACT
+// ============================================================
+function renderContact() {
+  const phoneIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.58 3.42 2 2 0 0 1 3.54 1.25h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.75a16 16 0 0 0 6 6l.86-.86a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16z" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>';
+  const mailIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M22 6l-10 7L2 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>';
+  const pinIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:2px;"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>';
+
+  const card = (name, kana, role, org, phones, email, address) => `
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+        <div style="width:52px;height:52px;border-radius:50%;background:var(--navy-light,#e8f0fb);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" fill="#054c9c"/><path d="M2 20c0-4 3-6 7-6s7 2 7 6" stroke="#054c9c" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:16px;color:var(--slate);">${name}</div>
+          <div style="font-size:12px;color:var(--slate-light);">${kana}</div>
+          <div style="font-size:12px;color:var(--slate-mid);margin-top:2px;">${role} ／ ${org}</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${phones.map(p => `<a href="tel:${p.num}" style="display:inline-flex;align-items:center;gap:10px;font-size:14px;color:var(--navy);text-decoration:none;padding:11px 14px;background:#f0f7ff;border-radius:10px;">${phoneIcon}<span style="font-weight:500;">${p.num}</span><span style="font-size:11px;color:var(--slate-light);margin-left:2px;">${p.label}</span></a>`).join('')}
+        <a href="mailto:${email}" style="display:inline-flex;align-items:center;gap:10px;font-size:14px;color:var(--navy);text-decoration:none;padding:11px 14px;background:#f0f7ff;border-radius:10px;">${mailIcon}<span style="font-weight:500;">${email}</span></a>
+        <div style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--slate-mid);padding:11px 14px;background:var(--bg);border-radius:10px;border:1px solid var(--border);">${pinIcon}${address}</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('contactContent').innerHTML =
+    card(
+      '伊良部 伸正', 'いらぶ のぶまさ',
+      '経営管理部 部長', 'DMM かりゆし水族館',
+      [{num:'070-3862-5123',label:'携帯'}, {num:'098-996-4844',label:'水族館'}],
+      'irabu-nobumasa@dmm.com',
+      '〒901-0225 沖縄県豊見城市字豊崎3-35'
+    ) +
+    card(
+      '前平 雄一朗', 'まえひら ゆういちろう',
+      '配送管理者', 'TENOHIRA',
+      [{num:'080-6496-4392',label:'携帯'}],
+      '1116maehira@gmail.com',
+      '〒901-2223 沖縄県宜野湾市大山2丁目21-5 サニーパートナー宜野湾3-A'
+    );
 }
 
 // ============================================================
