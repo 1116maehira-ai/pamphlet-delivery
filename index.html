@@ -1310,7 +1310,7 @@ function setupRealtime() {
 
 async function reloadFacilities() {
   const {data} = await sb.from('facilities').select('*').order('id');
-  if (data) state.facilities = data.map(f => ({...f, lastDone:f.last_done}));
+  if (data) state.facilities = data.map(f => ({...f, lastDone:f.last_done, visitCount: f.visit_count || 0}));
 }
 async function reloadStaff() {
   const {data} = await sb.from('staff').select('*').order('name');
