@@ -2351,7 +2351,7 @@ function renderDelivery() {
     ${genreFilterUI()}
     ${sortUI()}`;
   }
-  html += `<div class="facilityList">${allZoneFacs.map(f => {
+  html += `<div class="facilityList">${sortFacs(allZoneFacs).map(f => {
     const rep = todayReports.find(r=>r.facId===f.id);
     const isDone = f.status==='done';
     const isSkip = f.status==='skip';
