@@ -182,6 +182,21 @@ let currentTab = 'hotel';
 let currentZoneFilter = 'all';
 let currentSort = 'visit_asc';
 
+// 14日経過チェック: 配布完了から2週間以上経った施設は表示上「未完了」に戻す
+// （DBは書き換えない、index.htmlと同じロジック）
+function apply14DayReset(facilities) {
+  const now = new Date();
+  return facilities.map(f => {
+    if ((f.status === 'done' || f.status === 'skip') && f.last_done) {
+      const diff = (now - new Date(f.last_done)) / (1000 * 60 * 60 * 24);
+      if (diff >= 14) {
+        return { ...f, status: 'pending', last_done: null };
+      }
+    }
+    return f;
+  });
+}
+
 async function loadData() {
   const [facRes, repRes, delivRes, alertRes] = await Promise.all([
     sb.from('facilities').select('*').order('zone').order('id'),
@@ -189,7 +204,7 @@ async function loadData() {
     sb.from('deliveries').select('*'),
     sb.from('pamph_alerts').select('*').eq('status', 'open'),
   ]);
-  allFacilities = facRes.data || [];
+  allFacilities = apply14DayReset(facRes.data || []);
   allReports = repRes.data || [];
   allDeliveries = delivRes.data || [];
   allAlerts = alertRes.data || [];
@@ -379,7 +394,7 @@ function setupRealtime() {
   sb.channel('client-view')
     .on('postgres_changes', {event:'*', schema:'public', table:'facilities'}, async () => {
       const {data} = await sb.from('facilities').select('*').order('zone').order('id');
-      if (data) { allFacilities = data; updateStats(); renderTable(); }
+      if (data) { allFacilities = apply14DayReset(data); updateStats(); renderTable(); }
       document.getElementById('updatedTime').textContent = '最終更新: ' + new Date().toLocaleString('ja-JP');
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'reports'}, async () => {
