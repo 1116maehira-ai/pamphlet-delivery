@@ -334,9 +334,11 @@ function renderTable() {
 
     // 足りないコールボタン
     const hasOpenAlert = allAlerts.some(a => a.fac_id === f.id && a.status === 'open');
+    // HTML属性に入れる文字列はエスケープする（施設名に " や ' が含まれる場合の対策）
+    const facNameEsc = (f.name || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const alertBtn = hasOpenAlert
       ? `<span style="display:inline-block;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fef3c7;color:#92400e;white-space:nowrap;">⏳ 対応待ち</span>`
-      : `<button onclick="sendPamphAlert('${f.id}', ${JSON.stringify(f.name)})" style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:100px;border:1.5px solid #e87d4a;background:#fff0ec;color:#c0552a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">📢 足りない</button>`;
+      : `<button data-fac-id="${f.id}" data-fac-name="${facNameEsc}" onclick="sendPamphAlert(this.dataset.facId, this.dataset.facName)" style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:100px;border:1.5px solid #e87d4a;background:#fff0ec;color:#c0552a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">📢 足りない</button>`;
 
     // パンフ詳細
     let pamphHtml = '-';
