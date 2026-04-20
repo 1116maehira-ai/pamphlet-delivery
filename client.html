@@ -144,6 +144,19 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
       <option value="done">完了のみ</option>
       <option value="pending">未完了のみ</option>
     </select>
+    <select id="zoneFilter" onchange="setZoneFilter(this.value)">
+      <option value="all">すべてのエリア</option>
+      <option value="1">エリア1 那覇市</option>
+      <option value="2">エリア2 南部</option>
+      <option value="3">エリア3 中部</option>
+      <option value="4">エリア4 北部・恩納</option>
+      <option value="5">エリア5 名護・本部</option>
+    </select>
+    <select id="sortFilter" onchange="setSort(this.value)">
+      <option value="visit_asc">訪問回数: 少ない順</option>
+      <option value="visit_desc">訪問回数: 多い順</option>
+      <option value="default">デフォルト(エリア順)</option>
+    </select>
     <span class="badge-count" id="countBadge">-件</span>
   </div>
 
@@ -164,17 +177,22 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let allFacilities = [];
 let allReports = [];
 let allDeliveries = [];
+let allAlerts = [];
 let currentTab = 'hotel';
+let currentZoneFilter = 'all';
+let currentSort = 'visit_asc';
 
 async function loadData() {
-  const [facRes, repRes, delivRes] = await Promise.all([
+  const [facRes, repRes, delivRes, alertRes] = await Promise.all([
     sb.from('facilities').select('*').order('zone').order('id'),
     sb.from('reports').select('*'),
     sb.from('deliveries').select('*'),
+    sb.from('pamph_alerts').select('*').eq('status', 'open'),
   ]);
   allFacilities = facRes.data || [];
   allReports = repRes.data || [];
   allDeliveries = delivRes.data || [];
+  allAlerts = alertRes.data || [];
   updateStats();
   renderTable();
   document.getElementById('updatedTime').textContent = '最終更新: ' + new Date().toLocaleString('ja-JP');
@@ -204,6 +222,37 @@ function setTab(tab) {
   renderTable();
 }
 
+function setZoneFilter(zone) {
+  currentZoneFilter = zone;
+  renderTable();
+}
+
+function setSort(sort) {
+  currentSort = sort;
+  renderTable();
+}
+
+async function sendPamphAlert(facId, facName) {
+  if (!confirm(`「${facName}」にパンフが足りない旨を\nお送りしますか？`)) return;
+  try {
+    const { error } = await sb.from('pamph_alerts').insert({
+      id: 'pa' + Date.now(),
+      fac_id: facId,
+      status: 'open',
+    });
+    if (error) {
+      alert('送信に失敗しました。もう一度お試しください。\n\n' + error.message);
+      return;
+    }
+    // 画面のstateを即時更新
+    allAlerts.push({ fac_id: facId, status: 'open', created_at: new Date().toISOString() });
+    renderTable();
+    alert(`✅ 送信しました\n「${facName}」のパンフ不足を担当者に通知しました。`);
+  } catch (e) {
+    alert('送信エラー: ' + e.message);
+  }
+}
+
 function getLatestReport(facId) {
   // その施設への最新のreportを取得
   const facReports = allReports.filter(r => r.fac_id === facId);
@@ -224,6 +273,15 @@ function renderTable() {
   if (currentTab !== 'all') facs = facs.filter(f => f.genre === currentTab);
   if (q) facs = facs.filter(f => (f.name||'').toLowerCase().includes(q) || (f.area1||'').toLowerCase().includes(q) || (f.area2||'').toLowerCase().includes(q));
   if (statusFilter !== 'all') facs = facs.filter(f => f.status === statusFilter);
+  if (currentZoneFilter !== 'all') facs = facs.filter(f => String(f.zone) === currentZoneFilter);
+
+  // ソート
+  if (currentSort === 'visit_asc') {
+    facs = [...facs].sort((a, b) => (a.visit_count || 0) - (b.visit_count || 0));
+  } else if (currentSort === 'visit_desc') {
+    facs = [...facs].sort((a, b) => (b.visit_count || 0) - (a.visit_count || 0));
+  }
+  // 'default'はSupabase取得時のzone順・id順のまま
 
   document.getElementById('countBadge').textContent = facs.length + '件';
 
@@ -233,9 +291,11 @@ function renderTable() {
     <th>No</th>
     <th>地域</th>
     <th>施設名</th>
+    <th class="center">訪問回数</th>
+    <th class="center">📢 足りないコール</th>
     <th>住所</th>
     <th class="center">状況</th>
-    <th class="center">配布日</th>
+    <th class="center">最終配布日</th>
     <th class="center">パンフ種類・枚数</th>
     <th>先方担当者</th>
     <th>備考</th>
@@ -244,25 +304,39 @@ function renderTable() {
   // ボディ
   const body = document.getElementById('tableBody');
   if (facs.length === 0) {
-    body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94a3b8;">該当する施設がありません</td></tr>';
+    body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:#94a3b8;">該当する施設がありません</td></tr>';
     return;
   }
 
-  // ゾーン別にグループ化
+  // ゾーン別にグループ化（ソートしてないときのみ区切りを入れる）
   const ZONE_NAMES = {'1':'エリア1 那覇市','2':'エリア2 南部','3':'エリア3 中部','4':'エリア4 北部・恩納','5':'エリア5 名護・本部'};
+  const showZoneHeader = (currentTab === 'all' && currentSort === 'default' && currentZoneFilter === 'all');
   let currentZone = null;
   let rowNum = 0;
   let html = '';
 
   facs.forEach(f => {
-    if (currentTab === 'all' && f.zone !== currentZone) {
+    if (showZoneHeader && f.zone !== currentZone) {
       currentZone = f.zone;
-      html += `<tr class="section-header"><td colspan="9">📍 ${ZONE_NAMES[f.zone] || 'エリア' + f.zone}</td></tr>`;
+      html += `<tr class="section-header"><td colspan="11">📍 ${ZONE_NAMES[f.zone] || 'エリア' + f.zone}</td></tr>`;
     }
     rowNum++;
     const report = getLatestReport(f.id);
     const isDone = f.status === 'done';
     const delivDate = report ? getDeliveryDate(report.delivery_id) : null;
+    const vc = f.visit_count || 0;
+
+    // 訪問回数バッジ
+    const vcBg = vc === 0 ? '#fee2e2' : vc === 1 ? '#fef3c7' : vc >= 3 ? '#dcfce7' : '#dbeafe';
+    const vcCol = vc === 0 ? '#b91c1c' : vc === 1 ? '#92400e' : vc >= 3 ? '#166534' : '#1e40af';
+    const vcLabel = vc === 0 ? '🔴 未訪問' : `🔵 ${vc}回`;
+    const vcBadge = `<span style="display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:${vcBg};color:${vcCol};white-space:nowrap;">${vcLabel}</span>`;
+
+    // 足りないコールボタン
+    const hasOpenAlert = allAlerts.some(a => a.fac_id === f.id && a.status === 'open');
+    const alertBtn = hasOpenAlert
+      ? `<span style="display:inline-block;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fef3c7;color:#92400e;white-space:nowrap;">⏳ 対応待ち</span>`
+      : `<button onclick="sendPamphAlert('${f.id}', ${JSON.stringify(f.name)})" style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:100px;border:1.5px solid #e87d4a;background:#fff0ec;color:#c0552a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">📢 足りない</button>`;
 
     // パンフ詳細
     let pamphHtml = '-';
@@ -284,6 +358,8 @@ function renderTable() {
       <td style="color:#94a3b8;font-family:monospace;">${rowNum}</td>
       <td style="white-space:nowrap;">${f.area1 || ''}${f.area2 ? '<br><span style="color:#94a3b8;font-size:10px;">'+f.area2+'</span>' : ''}</td>
       <td style="font-weight:600;">${f.name}</td>
+      <td style="text-align:center;">${vcBadge}</td>
+      <td style="text-align:center;">${alertBtn}</td>
       <td style="color:#475569;font-size:11px;">${f.address || '-'}</td>
       <td style="text-align:center;"><span class="badge ${isDone ? 'badge-done' : 'badge-pending'}">${isDone ? '<span style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>完了</span>' : '未完了'}</span></td>
       <td style="text-align:center;white-space:nowrap;font-size:11px;">${delivDate || (f.last_done ? f.last_done : '-')}</td>
@@ -307,6 +383,11 @@ function setupRealtime() {
     .on('postgres_changes', {event:'*', schema:'public', table:'reports'}, async () => {
       const {data} = await sb.from('reports').select('*');
       if (data) { allReports = data; renderTable(); }
+      document.getElementById('updatedTime').textContent = '最終更新: ' + new Date().toLocaleString('ja-JP');
+    })
+    .on('postgres_changes', {event:'*', schema:'public', table:'pamph_alerts'}, async () => {
+      const {data} = await sb.from('pamph_alerts').select('*').eq('status', 'open');
+      if (data) { allAlerts = data; renderTable(); }
       document.getElementById('updatedTime').textContent = '最終更新: ' + new Date().toLocaleString('ja-JP');
     })
     .subscribe();
