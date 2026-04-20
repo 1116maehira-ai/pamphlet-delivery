@@ -318,6 +318,7 @@ input[type=file] { display:none; }
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="#054c9c"/><rect x="13" y="3" width="8" height="8" rx="2" fill="#054c9c"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#054c9c"/><rect x="13" y="13" width="8" height="8" rx="2" fill="#054c9c"/></svg>ダッシュボード</span></div>
+      <div id="pamphAlertBanner"></div>
       <div class="statsGrid" id="dashStats"></div>
       <div class="twoCol">
         <div class="card"><div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="18" rx="1.5" fill="#054c9c" opacity="0.3"/><rect x="3" y="10" width="7" height="11" rx="1.5" fill="#054c9c"/><rect x="14" y="3" width="7" height="18" rx="1.5" fill="#054c9c" opacity="0.3"/><rect x="14" y="6" width="7" height="15" rx="1.5" fill="#054c9c" opacity="0.7"/></svg>エリア別進捗</span></div><div id="areaProgress"></div></div>
@@ -1071,6 +1072,7 @@ let state = {
   schedules: [],
   deliveries: [],
   notifications: [],
+  pamphAlerts: [],
   availability: {},
   filterArea: 'all',
   filterGenre: 'all',
@@ -1203,7 +1205,7 @@ async function loadAllData() {
     since.setDate(since.getDate() - 60);
     const sinceStr = since.toISOString().slice(0,10);
 
-    const [facRes, staffRes, schedRes, delivRes, repRes, notifRes, availRes, pamphRes] = await Promise.all([
+    const [facRes, staffRes, schedRes, delivRes, repRes, notifRes, availRes, pamphRes, alertRes] = await Promise.all([
       sb.from('facilities').select('id,name,genre,area1,area2,address,tel,rack,zone,status,last_done,visit_count').order('id'),
       sb.from('staff').select('*').order('name'),
       sb.from('schedules').select('*').order('date', {ascending:false}).limit(100),
@@ -1212,6 +1214,7 @@ async function loadAllData() {
       sb.from('notifications').select('*').order('created_at', {ascending:false}).limit(30),
       sb.from('availability').select('*'),
       sb.from('pamph_types').select('*').order('sort_order'),
+      sb.from('pamph_alerts').select('*').eq('status', 'open').order('created_at', {ascending:false}),
     ]);
 
     if (facRes.data) {
@@ -1275,6 +1278,7 @@ async function loadAllData() {
     }
     if (pamphRes.data) state.pamphTypes = pamphRes.data;
     else state.pamphTypes = [{id:'pt1',name:'繁体字',short:'繁',sort_order:1},{id:'pt2',name:'日本語',short:'日',sort_order:2},{id:'pt3',name:'英語',short:'英',sort_order:3},{id:'pt4',name:'簡体字',short:'簡',sort_order:4},{id:'pt5',name:'韓国語',short:'韓',sort_order:5}];
+    if (alertRes.data) state.pamphAlerts = alertRes.data;
     // If no facilities, seed them
     if (state.facilities.length === 0) await seedInitialData();
 
@@ -1305,12 +1309,17 @@ function setupRealtime() {
       }
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'availability'}, () => { reloadAvailability(); renderPage(currentPage); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'pamph_alerts'}, async () => { await reloadPamphAlerts(); if(currentPage==='dashboard') renderDashboard(); })
     .subscribe();
 }
 
 async function reloadFacilities() {
   const {data} = await sb.from('facilities').select('*').order('id');
   if (data) state.facilities = data.map(f => ({...f, lastDone:f.last_done, visitCount: f.visit_count || 0}));
+}
+async function reloadPamphAlerts() {
+  const {data} = await sb.from('pamph_alerts').select('*').eq('status', 'open').order('created_at', {ascending:false});
+  if (data) state.pamphAlerts = data;
 }
 async function reloadStaff() {
   const {data} = await sb.from('staff').select('*').order('name');
@@ -1387,6 +1396,12 @@ async function updateFacilityStatus(id, status, lastDone) {
     const newCount = (f?.visitCount || 0) + 1;
     await sb.from('facilities').update({status, last_done:lastDone, visit_count: newCount}).eq('id', id);
     if (f) f.visitCount = newCount;
+    // 配布完了したら、その施設の未対応アラートを自動で対応済みにする
+    await sb.from('pamph_alerts').update({
+      status: 'resolved',
+      resolved_at: new Date().toISOString(),
+      resolved_by: state.currentUser?.name || 'auto',
+    }).eq('fac_id', id).eq('status', 'open');
   } else {
     await sb.from('facilities').update({status, last_done:lastDone}).eq('id', id);
   }
@@ -1567,6 +1582,66 @@ function renderPage(id) {
 // ============================================================
 // DASHBOARD
 // ============================================================
+function renderPamphAlertBanner() {
+  const banner = document.getElementById('pamphAlertBanner');
+  if (!banner) return;
+  const alerts = state.pamphAlerts || [];
+  if (alerts.length === 0) {
+    banner.innerHTML = '';
+    return;
+  }
+  // 未対応アラートを一覧表示
+  const alertItems = alerts.map(a => {
+    const fac = state.facilities.find(f => f.id === a.fac_id);
+    const facName = fac?.name || '不明な施設';
+    const facZone = fac ? (AREA_NAMES[fac.zone] || 'エリア'+fac.zone) : '-';
+    const facArea = fac ? (fac.area2 || fac.area1 || '') : '';
+    // 受信日時を日本時間で整形
+    const dt = new Date(a.created_at);
+    const dtStr = `${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    const isAdmin = state.currentUser?.type === 'admin';
+    const resolveBtn = isAdmin
+      ? `<button onclick="resolvePamphAlert('${a.id}')" style="padding:4px 10px;border-radius:100px;border:1.5px solid #4aa876;background:white;color:#2d6e50;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">✓ 対応済みにする</button>`
+      : '';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:white;border-radius:10px;border:1px solid #fde047;margin-bottom:6px;flex-wrap:wrap;">
+      <span style="font-size:12px;font-weight:700;color:#b91c1c;white-space:nowrap;">🚨</span>
+      <div style="flex:1;min-width:180px;">
+        <div style="font-size:13px;font-weight:700;color:#1a2340;">${facName}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">${facZone}${facArea?' / '+facArea:''} · ${dtStr} 受信</div>
+      </div>
+      ${resolveBtn}
+    </div>`;
+  }).join('');
+  banner.innerHTML = `
+    <div style="background:linear-gradient(135deg,#fef3c7,#fff7ed);border:2px solid #f0b700;border-radius:14px;padding:14px 16px;margin-bottom:18px;box-shadow:0 3px 14px rgba(240,183,0,0.18);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:22px;">📢</span>
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:800;color:#78350f;">パンフ不足コール</div>
+          <div style="font-size:11px;color:#92400e;margin-top:2px;">DMM様より「パンフが足りない」と連絡が入っています</div>
+        </div>
+        <span style="background:#b91c1c;color:white;font-size:12px;font-weight:800;padding:4px 12px;border-radius:100px;">${alerts.length}件 未対応</span>
+      </div>
+      ${alertItems}
+    </div>
+  `;
+}
+
+async function resolvePamphAlert(alertId) {
+  if (!confirm('このコールを対応済みにしますか？')) return;
+  const {error} = await sb.from('pamph_alerts').update({
+    status: 'resolved',
+    resolved_at: new Date().toISOString(),
+    resolved_by: state.currentUser?.name || state.currentUser?.id || null,
+  }).eq('id', alertId);
+  if (error) {
+    alert('更新に失敗しました: ' + error.message);
+    return;
+  }
+  await reloadPamphAlerts();
+  renderDashboard();
+}
+
 function renderDashboard() {
   const total = state.facilities.length;
   const done = state.facilities.filter(f=>f.status==='done').length;
@@ -1575,6 +1650,10 @@ function renderDashboard() {
   const visited1plus = state.facilities.filter(f=>f.status!=='skip' && (f.visitCount||0)>=1).length;
   const activeStaff = state.staff.filter(s=>s.online).length;
   const pct = total>0 ? Math.round(done/total*100) : 0;
+
+  // パンフ不足コールバナー
+  renderPamphAlertBanner();
+
   document.getElementById('dashStats').innerHTML = `
     <div class="statCard ocean"><div class="statLabel">登録施設数</div><div class="statValue">${total}</div><div class="statSub">件</div></div>
     <div class="statCard forest"><div class="statLabel">配布完了</div><div class="statValue">${done}</div><div class="statSub">件 (${pct}%)</div></div>
