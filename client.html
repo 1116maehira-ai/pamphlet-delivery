@@ -128,6 +128,8 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
     <div class="stat"><div class="stat-val" style="color:var(--coral);" id="statPending">-</div><div class="stat-lbl">未完了</div></div>
     <div class="stat"><div class="stat-val" style="color:var(--navy);" id="statPct">-</div><div class="stat-lbl">完了率</div></div>
     <div class="stat"><div class="stat-val" style="color:#b91c1c;" id="statUnvisited">-</div><div class="stat-lbl">🔴 未訪問施設</div></div>
+    <div class="stat"><div class="stat-val" style="color:#0369a1;" id="statTotalPamph">-</div><div class="stat-lbl">📦 累計配布枚数</div></div>
+    <div class="stat"><div class="stat-val" style="color:#7c3aed;" id="statMonthPamph">-</div><div class="stat-lbl">📅 今月の配布</div></div>
   </div>
 
   <div class="tabs">
@@ -222,11 +224,28 @@ function updateStats() {
   const pending = allFacilities.filter(f => f.status === 'pending').length;
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
   const unvisited = allFacilities.filter(f => f.status !== 'skip' && (f.visit_count || 0) === 0).length;
+
+  // 累計配布枚数: 全レポートの枚数合計
+  const totalPamph = allReports.reduce((sum, r) => sum + getReportPamphCount(r), 0);
+
+  // 今月の配布枚数: deliveryの日付が今月の reports
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthPamph = allReports.reduce((sum, r) => {
+    const dDate = getDeliveryDate(r.delivery_id);
+    if (dDate && dDate.startsWith(ym)) {
+      return sum + getReportPamphCount(r);
+    }
+    return sum;
+  }, 0);
+
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statDone').textContent = done;
   document.getElementById('statPending').textContent = pending;
   document.getElementById('statPct').textContent = pct + '%';
   document.getElementById('statUnvisited').textContent = unvisited;
+  document.getElementById('statTotalPamph').textContent = totalPamph.toLocaleString();
+  document.getElementById('statMonthPamph').textContent = monthPamph.toLocaleString();
 }
 
 function setTab(tab) {
@@ -278,6 +297,69 @@ function getLatestReport(facId) {
 function getDeliveryDate(deliveryId) {
   const d = allDeliveries.find(d => d.id === deliveryId);
   return d ? d.date : null;
+}
+
+// ある report の配布枚数を計算（pamph_detailの合計 または pamph_count）
+function getReportPamphCount(report) {
+  if (!report) return 0;
+  try {
+    const detail = JSON.parse(report.pamph_detail || '{}');
+    const entries = Object.entries(detail);
+    if (entries.length > 0) {
+      return entries.reduce((sum, [_, v]) => sum + (Number(v) || 0), 0);
+    }
+  } catch (e) {}
+  return Number(report.pamph_count) || 0;
+}
+
+// ある report の種類別内訳を取得 {日本語: 50, 繁体字: 30, ...}
+function getReportPamphDetail(report) {
+  if (!report) return {};
+  try {
+    const detail = JSON.parse(report.pamph_detail || '{}');
+    if (Object.keys(detail).length > 0) return detail;
+  } catch (e) {}
+  // 詳細がない場合は「不明」として合計のみ
+  const count = Number(report.pamph_count) || 0;
+  return count > 0 ? { '不明': count } : {};
+}
+
+// ある施設への全配布レポートを新しい順で取得
+function getAllReportsForFacility(facId) {
+  return allReports
+    .filter(r => r.fac_id === facId)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+// 施設ごとの累計枚数を計算
+function getFacilityTotalPamph(facId) {
+  return getAllReportsForFacility(facId).reduce((sum, r) => sum + getReportPamphCount(r), 0);
+}
+
+// 施設ごとの種類別累計を計算
+function getFacilityTotalDetail(facId) {
+  const total = {};
+  getAllReportsForFacility(facId).forEach(r => {
+    const detail = getReportPamphDetail(r);
+    Object.entries(detail).forEach(([k, v]) => {
+      total[k] = (total[k] || 0) + (Number(v) || 0);
+    });
+  });
+  return total;
+}
+
+// 履歴展開のトグル
+function toggleFacilityHistory(facId) {
+  const el = document.getElementById('hist-' + facId);
+  const btn = document.getElementById('histBtn-' + facId);
+  if (!el) return;
+  if (el.style.display === 'none' || !el.style.display) {
+    el.style.display = 'block';
+    if (btn) btn.textContent = '▲ 閉じる';
+  } else {
+    el.style.display = 'none';
+    if (btn) btn.textContent = '▼ 全履歴を見る';
+  }
 }
 
 function renderTable() {
@@ -355,20 +437,46 @@ function renderTable() {
       ? `<span style="display:inline-block;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fef3c7;color:#92400e;white-space:nowrap;">⏳ 対応待ち</span>`
       : `<button data-fac-id="${f.id}" data-fac-name="${facNameEsc}" onclick="sendPamphAlert(this.dataset.facId, this.dataset.facName)" style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:100px;border:1.5px solid #e87d4a;background:#fff0ec;color:#c0552a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">📢 足りない</button>`;
 
-    // パンフ詳細
+    // パンフ詳細（展開式：最新表示＋全履歴展開）
+    const allFacReports = getAllReportsForFacility(f.id);
     let pamphHtml = '-';
-    if (report) {
-      try {
-        const detail = JSON.parse(report.pamph_detail || '{}');
-        const entries = Object.entries(detail);
-        if (entries.length > 0) {
-          pamphHtml = entries.map(([k,v]) => `<span class="badge badge-lang">【${k}】${v}枚</span>`).join('');
-        } else if (report.pamph_count) {
-          pamphHtml = `${report.pamph_count}枚`;
-        }
-      } catch(e) {
-        pamphHtml = report.pamph_count ? `${report.pamph_count}枚` : '-';
-      }
+    if (allFacReports.length > 0) {
+      const latestReport = allFacReports[0];
+      const latestCount = getReportPamphCount(latestReport);
+      const totalCount = getFacilityTotalPamph(f.id);
+      const totalDetail = getFacilityTotalDetail(f.id);
+      const totalDetailHtml = Object.entries(totalDetail)
+        .map(([k,v]) => `<span class="badge badge-lang">【${k}】${v}枚</span>`).join('');
+
+      // 履歴を各回ごとに
+      const historyHtml = allFacReports.map(r => {
+        const rDate = getDeliveryDate(r.delivery_id) || (r.reported_at || r.created_at || '').slice(0,10);
+        const rDetail = getReportPamphDetail(r);
+        const rCount = getReportPamphCount(r);
+        const rDetailHtml = Object.entries(rDetail)
+          .map(([k,v]) => `<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;background:#e0f2fe;color:#0369a1;margin:1px;">${k}:${v}</span>`).join('');
+        return `<div style="padding:6px 8px;border-bottom:1px dashed #e2e8f0;font-size:11px;">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+            <span style="font-weight:600;color:#475569;">${rDate}</span>
+            <span style="font-weight:700;color:#0369a1;">${rCount}枚</span>
+          </div>
+          ${rDetailHtml ? `<div style="margin-top:3px;">${rDetailHtml}</div>` : ''}
+        </div>`;
+      }).join('');
+
+      pamphHtml = `
+        <div style="font-size:11px;">
+          <div style="font-weight:700;color:#0369a1;">最新: ${latestCount}枚</div>
+          <div style="color:#64748b;font-size:10px;margin-top:1px;">累計: ${totalCount}枚（${allFacReports.length}回）</div>
+          <button id="histBtn-${f.id}" onclick="toggleFacilityHistory('${f.id}')" style="margin-top:4px;padding:2px 8px;border-radius:8px;border:1px solid #cbd5e1;background:white;color:#475569;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;">▼ 全履歴を見る</button>
+          <div id="hist-${f.id}" style="display:none;margin-top:6px;padding:6px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;text-align:left;max-width:280px;">
+            <div style="font-size:10px;font-weight:700;color:#334155;margin-bottom:4px;">▼ 種類別累計</div>
+            <div style="margin-bottom:6px;">${totalDetailHtml || '<span style="color:#94a3b8;">データなし</span>'}</div>
+            <div style="font-size:10px;font-weight:700;color:#334155;margin-bottom:2px;">▼ 配布履歴</div>
+            ${historyHtml}
+          </div>
+        </div>
+      `;
     }
 
     html += `<tr class="${isDone ? 'done-row' : ''}">
@@ -399,7 +507,7 @@ function setupRealtime() {
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'reports'}, async () => {
       const {data} = await sb.from('reports').select('*');
-      if (data) { allReports = data; renderTable(); }
+      if (data) { allReports = data; updateStats(); renderTable(); }
       document.getElementById('updatedTime').textContent = '最終更新: ' + new Date().toLocaleString('ja-JP');
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'pamph_alerts'}, async () => {
