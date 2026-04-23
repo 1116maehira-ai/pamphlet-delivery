@@ -1315,7 +1315,19 @@ function setupRealtime() {
 
 async function reloadFacilities() {
   const {data} = await sb.from('facilities').select('*').order('id');
-  if (data) state.facilities = data.map(f => ({...f, lastDone:f.last_done, visitCount: f.visit_count || 0}));
+  if (data) {
+    state.facilities = data.map(f => ({...f, lastDone:f.last_done, visitCount: f.visit_count || 0}));
+    // 14日チェック: 表示上のみ反映（DBは書き換えない）
+    // loadAllDataと同じロジック。これを入れないと、補充完了後のreloadで
+    // 14日以上前のdone/skip施設がpendingに戻らず、全部「配達済」扱いされてしまう
+    const now = new Date();
+    state.facilities.forEach(f => {
+      if ((f.status === 'done' || f.status === 'skip') && f.lastDone) {
+        const diff = (now - new Date(f.lastDone)) / (1000*60*60*24);
+        if (diff >= 14) { f.status = 'pending'; f.lastDone = null; }
+      }
+    });
+  }
 }
 async function reloadPamphAlerts() {
   const {data} = await sb.from('pamph_alerts').select('*').eq('status', 'open').order('created_at', {ascending:false});
