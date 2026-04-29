@@ -1313,6 +1313,48 @@ function setupRealtime() {
     .subscribe();
 }
 
+// ====== 訪問優先度関連のヘルパー ======
+// 最終訪問からの経過日数を返す（未訪問はnull）
+function getDaysSinceLastVisit(f) {
+  if (!f.lastDone) return null; // 未訪問 or last_doneなし
+  const now = new Date();
+  const last = new Date(f.lastDone);
+  return Math.floor((now - last) / (1000 * 60 * 60 * 24));
+}
+
+// 経過日数バッジ（HTML文字列）を生成
+// days: number | null
+function makeElapsedBadge(days, opts = {}) {
+  if (days == null) return ''; // 未訪問は何も出さない（訪問回数バッジ側で🔴未訪問が出てる）
+  const compact = opts.compact || false;
+  let bg, col, icon, label;
+  if (days >= 42) { bg='#fee2e2'; col='#b91c1c'; icon='🔥'; label=`${days}日経過`; }
+  else if (days >= 28) { bg='#fed7aa'; col='#c2410c'; icon='⏰'; label=`${days}日経過`; }
+  else if (days >= 14) { bg='#fef3c7'; col='#92400e'; icon='🟡'; label=`${days}日経過`; }
+  else { bg='#dcfce7'; col='#166534'; icon='✅'; label=`${days}日経過`; }
+  const padding = compact ? '2px 6px' : '3px 8px';
+  const fontSize = compact ? '10px' : '11px';
+  return `<span style="display:inline-block;font-size:${fontSize};font-weight:700;padding:${padding};border-radius:10px;background:${bg};color:${col};white-space:nowrap;">${icon} ${label}</span>`;
+}
+
+// 複合ソート: 訪問回数 → 同回数なら経過日数が長い順（古い訪問が優先）
+// 未訪問(lastDone=null)は最優先（経過日数=Infinity扱い）
+function sortByPriority(facs, direction = 'asc') {
+  return [...facs].sort((a, b) => {
+    const vcA = a.visitCount || 0;
+    const vcB = b.visitCount || 0;
+    if (vcA !== vcB) {
+      return direction === 'asc' ? vcA - vcB : vcB - vcA;
+    }
+    // 訪問回数が同じ → 経過日数が長い順（古い訪問が上）
+    const daysA = getDaysSinceLastVisit(a);
+    const daysB = getDaysSinceLastVisit(b);
+    const da = daysA == null ? Infinity : daysA; // 未訪問は最優先
+    const db = daysB == null ? Infinity : daysB;
+    return db - da;
+  });
+}
+
 async function reloadFacilities() {
   const {data} = await sb.from('facilities').select('*').order('id');
   if (data) {
@@ -1796,8 +1838,8 @@ function renderFacilities() {
   if (q) facs = facs.filter(f=>(f.name||'').toLowerCase().includes(q)||(f.address||'').toLowerCase().includes(q));
   // ソート
   const sort = state.facilSort || 'default';
-  if (sort === 'visit_asc') facs = [...facs].sort((a,b) => (a.visitCount||0) - (b.visitCount||0));
-  else if (sort === 'visit_desc') facs = [...facs].sort((a,b) => (b.visitCount||0) - (a.visitCount||0));
+  if (sort === 'visit_asc') facs = sortByPriority(facs, 'asc');
+  else if (sort === 'visit_desc') facs = sortByPriority(facs, 'desc');
   const doneCount = facs.filter(f=>f.status==='done').length;
   document.getElementById('facilitiesContainer').innerHTML = `
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
@@ -1816,7 +1858,7 @@ function renderFacilities() {
       <td style="font-size:12px;">${{hotel:'ホテル',rental:'レンタカー',michi:'道の駅・観光',other:'その他'}[f.genre]||f.genre}</td>
       <td style="font-size:12px;color:var(--slate-mid);">${f.address||'-'}</td>
       <td>${f.status==='done'?'<span class="badge badge-done">完了</span>':f.status==='skip'?'<span class="badge badge-skip">不要</span>':'<span class="badge badge-pending">未完了</span>'}${f.lastDone?`<div style="font-size:10px;color:var(--slate-light);">${f.lastDone}</div>`:''}</td>
-      <td style="text-align:center;"><span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:${(f.visitCount||0)===0?'#fee2e2':(f.visitCount||0)===1?'#fef3c7':(f.visitCount||0)>=3?'#dcfce7':'#e0f2fe'};color:${(f.visitCount||0)===0?'#b91c1c':(f.visitCount||0)===1?'#92400e':(f.visitCount||0)>=3?'#166534':'#0369a1'}">${f.visitCount||0}回</span></td>
+      <td style="text-align:center;"><div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:${(f.visitCount||0)===0?'#fee2e2':(f.visitCount||0)===1?'#fef3c7':(f.visitCount||0)>=3?'#dcfce7':'#e0f2fe'};color:${(f.visitCount||0)===0?'#b91c1c':(f.visitCount||0)===1?'#92400e':(f.visitCount||0)>=3?'#166534':'#0369a1'}">${f.visitCount||0}回</span>${makeElapsedBadge(getDaysSinceLastVisit(f), {compact:true})}</div></td>
       <td><div style="display:flex;gap:4px;">
         ${state.currentUser.type==='admin' ? `
           <button class="btn btn-outline btn-sm" onclick="editFacility('${f.id}')">編集</button>
@@ -2386,8 +2428,8 @@ function renderDelivery() {
   // ソート
   const delivSort = state.deliverySort || 'visit_asc';
   const sortFacs = (facs) => {
-    if (delivSort === 'visit_asc') return [...facs].sort((a,b) => (a.visitCount||0) - (b.visitCount||0));
-    if (delivSort === 'visit_desc') return [...facs].sort((a,b) => (b.visitCount||0) - (a.visitCount||0));
+    if (delivSort === 'visit_asc') return sortByPriority(facs, 'asc');
+    if (delivSort === 'visit_desc') return sortByPriority(facs, 'desc');
     return facs;
   };
   const zoneFacs = sortFacs(allZoneFacs.filter(f => f.status!=='done' && f.status!=='skip'));
@@ -2454,6 +2496,7 @@ function renderDelivery() {
             ${isDone ? '<span style="background:#4aa876;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">✓ 配達済</span>' : ''}
             ${isSkip ? '<span style="background:#94a3b8;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">⏭ 補充不要</span>' : ''}
             ${(()=>{const vc=f.visitCount||0;const bg=vc===0?'#fee2e2':vc===1?'#fef3c7':vc>=3?'#dcfce7':'#dbeafe';const col=vc===0?'#b91c1c':vc===1?'#92400e':vc>=3?'#166534':'#1e40af';return `<span style="background:${bg};color:${col};font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;">${vc===0?'🔴 未訪問':`🔵 ${vc}回訪問済`}</span>`})()}
+            ${makeElapsedBadge(getDaysSinceLastVisit(f), {compact:true})}
             ${f.name}
           </div>
           <div class="fcMeta">
