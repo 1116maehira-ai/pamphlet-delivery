@@ -1220,11 +1220,12 @@ async function loadAllData() {
     if (facRes.data) {
       state.facilities = facRes.data.map(f => ({...f, lastDone: f.last_done, visitCount: f.visit_count || 0}));
       // 14日チェック: 表示上のみ反映（DBは書き換えない）
+      // ※ lastDoneは保持する → 経過日数バッジを表示するため
       const now = new Date();
       state.facilities.forEach(f => {
         if ((f.status === 'done' || f.status === 'skip') && f.lastDone) {
           const diff = (now - new Date(f.lastDone)) / (1000*60*60*24);
-          if (diff >= 14) { f.status = 'pending'; f.lastDone = null; }
+          if (diff >= 14) { f.status = 'pending'; }
           // ※ DBへの自動書き換えは行わない（管理者が手動でリセットする）
         }
       });
@@ -1362,11 +1363,12 @@ async function reloadFacilities() {
     // 14日チェック: 表示上のみ反映（DBは書き換えない）
     // loadAllDataと同じロジック。これを入れないと、補充完了後のreloadで
     // 14日以上前のdone/skip施設がpendingに戻らず、全部「配達済」扱いされてしまう
+    // ※ lastDoneは保持する → 経過日数バッジを表示するため
     const now = new Date();
     state.facilities.forEach(f => {
       if ((f.status === 'done' || f.status === 'skip') && f.lastDone) {
         const diff = (now - new Date(f.lastDone)) / (1000*60*60*24);
-        if (diff >= 14) { f.status = 'pending'; f.lastDone = null; }
+        if (diff >= 14) { f.status = 'pending'; }
       }
     });
   }
