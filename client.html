@@ -157,6 +157,9 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
     <select id="sortFilter" onchange="setSort(this.value)">
       <option value="visit_asc">訪問回数: 少ない順</option>
       <option value="visit_desc">訪問回数: 多い順</option>
+      <option value="date_desc">配布日: 新しい順</option>
+      <option value="date_asc">配布日: 古い順</option>
+      <option value="today_only">📅 今日の配布のみ</option>
       <option value="default">デフォルト(エリア順)</option>
     </select>
     <span class="badge-count" id="countBadge">-件</span>
@@ -372,11 +375,52 @@ function renderTable() {
   if (statusFilter !== 'all') facs = facs.filter(f => f.status === statusFilter);
   if (currentZoneFilter !== 'all') facs = facs.filter(f => String(f.zone) === currentZoneFilter);
 
-  // ソート
+  // ソート＆フィルター
+  // 各施設の最終配布日を取得するヘルパー
+  const getLatestDeliveryDate = (facId) => {
+    const r = getLatestReport(facId);
+    if (!r) return null;
+    return getDeliveryDate(r.delivery_id) || r.reported_at || r.created_at || null;
+  };
+
   if (currentSort === 'visit_asc') {
     facs = [...facs].sort((a, b) => (a.visit_count || 0) - (b.visit_count || 0));
   } else if (currentSort === 'visit_desc') {
     facs = [...facs].sort((a, b) => (b.visit_count || 0) - (a.visit_count || 0));
+  } else if (currentSort === 'date_desc') {
+    // 配布日: 新しい順（未配布は最後）
+    facs = [...facs].sort((a, b) => {
+      const da = getLatestDeliveryDate(a.id);
+      const db = getLatestDeliveryDate(b.id);
+      if (!da && !db) return 0;
+      if (!da) return 1;  // 未配布は後ろ
+      if (!db) return -1;
+      return db.localeCompare(da); // 新しい順
+    });
+  } else if (currentSort === 'date_asc') {
+    // 配布日: 古い順（未配布は最後）
+    facs = [...facs].sort((a, b) => {
+      const da = getLatestDeliveryDate(a.id);
+      const db = getLatestDeliveryDate(b.id);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da.localeCompare(db); // 古い順
+    });
+  } else if (currentSort === 'today_only') {
+    // 今日の配布のみ表示
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    facs = facs.filter(f => {
+      const d = getLatestDeliveryDate(f.id);
+      return d && d.startsWith(todayStr);
+    });
+    // 今日の配布の中で新しい順
+    facs = facs.sort((a, b) => {
+      const da = getLatestDeliveryDate(a.id);
+      const db = getLatestDeliveryDate(b.id);
+      return (db || '').localeCompare(da || '');
+    });
   }
   // 'default'はSupabase取得時のzone順・id順のまま
 
