@@ -223,7 +223,8 @@ async function loadData() {
 
 function updateStats() {
   const total = allFacilities.length;
-  const done = allFacilities.filter(f => f.status === 'done').length;
+  // 完了 = done + skip（補充不要も「対応済み」としてカウント）
+  const done = allFacilities.filter(f => f.status === 'done' || f.status === 'skip').length;
   const pending = allFacilities.filter(f => f.status === 'pending').length;
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
   const unvisited = allFacilities.filter(f => f.status !== 'skip' && (f.visit_count || 0) === 0).length;
@@ -372,7 +373,14 @@ function renderTable() {
   let facs = allFacilities;
   if (currentTab !== 'all') facs = facs.filter(f => f.genre === currentTab);
   if (q) facs = facs.filter(f => (f.name||'').toLowerCase().includes(q) || (f.area1||'').toLowerCase().includes(q) || (f.area2||'').toLowerCase().includes(q));
-  if (statusFilter !== 'all') facs = facs.filter(f => f.status === statusFilter);
+  if (statusFilter !== 'all') {
+    if (statusFilter === 'done') {
+      // 「完了のみ」→ done と skip を両方含める
+      facs = facs.filter(f => f.status === 'done' || f.status === 'skip');
+    } else {
+      facs = facs.filter(f => f.status === statusFilter);
+    }
+  }
   if (currentZoneFilter !== 'all') facs = facs.filter(f => String(f.zone) === currentZoneFilter);
 
   // ソート＆フィルター
@@ -464,6 +472,8 @@ function renderTable() {
     rowNum++;
     const report = getLatestReport(f.id);
     const isDone = f.status === 'done';
+    const isSkip = f.status === 'skip';
+    const isPositive = isDone || isSkip; // skipもポジティブ扱い（行スタイル用）
     const delivDate = report ? getDeliveryDate(report.delivery_id) : null;
     const vc = f.visit_count || 0;
 
@@ -523,14 +533,24 @@ function renderTable() {
       `;
     }
 
-    html += `<tr class="${isDone ? 'done-row' : ''}">
+    // 状況バッジ
+    let statusBadge;
+    if (isDone) {
+      statusBadge = `<span class="badge badge-done"><span style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>完了</span></span>`;
+    } else if (isSkip) {
+      statusBadge = `<span class="badge badge-done">✅ 補充不要</span>`;
+    } else {
+      statusBadge = `<span class="badge badge-pending">未完了</span>`;
+    }
+
+    html += `<tr class="${isPositive ? 'done-row' : ''}">
       <td style="color:#94a3b8;font-family:monospace;">${rowNum}</td>
       <td style="white-space:nowrap;">${f.area1 || ''}${f.area2 ? '<br><span style="color:#94a3b8;font-size:10px;">'+f.area2+'</span>' : ''}</td>
       <td style="font-weight:600;">${f.name}</td>
       <td style="text-align:center;">${vcBadge}</td>
       <td style="text-align:center;">${alertBtn}</td>
       <td style="color:#475569;font-size:11px;">${f.address || '-'}</td>
-      <td style="text-align:center;"><span class="badge ${isDone ? 'badge-done' : 'badge-pending'}">${isDone ? '<span style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>完了</span>' : '未完了'}</span></td>
+      <td style="text-align:center;">${statusBadge}</td>
       <td style="text-align:center;white-space:nowrap;font-size:11px;">${delivDate || (f.last_done ? f.last_done : '-')}</td>
       <td style="text-align:center;">${pamphHtml}</td>
       <td style="font-size:11px;">${report?.facility_contact || '-'}</td>
