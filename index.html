@@ -3803,12 +3803,16 @@ function calculateLaborCost(deliveries, hourly) {
   const totalCappedHours = dailyData.reduce((s, d) => s + d.finalHours, 0);
   const totalActualHours = dailyData.reduce((s, d) => s + d.actualHours, 0);
   const laborCost = Math.round(hourly * totalCappedHours);
+  const laborTax = Math.round(laborCost * 0.1);  // 消費税10%
+  const laborCostTotal = laborCost + laborTax;
   
   return {
     dailyData,
     totalCappedHours,
     totalActualHours,
-    laborCost,
+    laborCost,       // 税抜き
+    laborTax,        // 消費税(10%)
+    laborCostTotal,  // 税込み
   };
 }
 
@@ -3900,6 +3904,8 @@ function renderInvoice() {
   const totalCappedHours = laborResult.totalCappedHours;
   const totalActualHours = laborResult.totalActualHours;
   const laborCost = laborResult.laborCost;
+  const laborTax = laborResult.laborTax;
+  const laborCostTotal = laborResult.laborCostTotal;
   
   let totalKm = 0;
   let totalExpense = 0;
@@ -3946,7 +3952,7 @@ function renderInvoice() {
   
   const fuelLiters = fuel > 0 ? totalKm / fuel : 0;
   const fuelCost = Math.round(fuelLiters * fuelPrice);
-  const totalAmount = laborCost + fuelCost + totalExpense;
+  const totalAmount = laborCostTotal + fuelCost + totalExpense;
   
   // ===== サマリー表示 =====
   const fmtH = (h) => h.toFixed(1);
@@ -3977,16 +3983,24 @@ function renderInvoice() {
             </div>
             <div style="font-size:18px;font-weight:800;color:#054c9c;">¥${fmt(laborCost)}</div>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px dashed #e2e8f0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;">
+            <div style="font-size:11px;color:#64748b;">消費税（10%）</div>
+            <div style="font-size:14px;font-weight:600;color:#054c9c;">¥${fmt(laborTax)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0 8px;padding-left:14px;border-bottom:1px dashed #cbd5e1;">
+            <div style="font-size:12px;font-weight:600;color:#1e293b;">人件費 合計（税込）</div>
+            <div style="font-size:16px;font-weight:800;color:#054c9c;">¥${fmt(laborCostTotal)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
             <div>
-              <div style="font-size:13px;font-weight:700;color:#1e293b;">◾ 燃料費</div>
+              <div style="font-size:13px;font-weight:700;color:#1e293b;">◾ 燃料費 <span style="font-size:10px;font-weight:500;color:#94a3b8;">（税なし）</span></div>
               <div style="font-size:11px;color:#64748b;margin-top:2px;">${fmt(Math.round(totalKm))}km ÷ ${fuel}km/L = ${fuelLiters.toFixed(1)}L × ¥${fuelPrice}/L</div>
             </div>
             <div style="font-size:18px;font-weight:800;color:#c2410c;">¥${fmt(fuelCost)}</div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px dashed #e2e8f0;">
             <div>
-              <div style="font-size:13px;font-weight:700;color:#1e293b;">◾ 経費（駐車・高速など）</div>
+              <div style="font-size:13px;font-weight:700;color:#1e293b;">◾ 経費（駐車・高速など）<span style="font-size:10px;font-weight:500;color:#94a3b8;">（税なし）</span></div>
               <div style="font-size:11px;color:#64748b;margin-top:2px;">${expenseList.length}件の領収書記録</div>
             </div>
             <div style="font-size:18px;font-weight:800;color:#7c3aed;">¥${fmt(totalExpense)}</div>
@@ -3995,6 +4009,7 @@ function renderInvoice() {
             <div style="font-size:16px;font-weight:800;color:#054c9c;">💰 合計請求額</div>
             <div style="font-size:26px;font-weight:900;color:#dc2626;">¥${fmt(totalAmount)}</div>
           </div>
+          <div style="text-align:right;font-size:10px;color:#94a3b8;padding-top:2px;">（うち消費税 ¥${fmt(laborTax)}）</div>
         </div>
       </div>
       
@@ -4164,6 +4179,8 @@ function printInvoice() {
   const totalCappedHours = laborResult.totalCappedHours;
   const totalActualHours = laborResult.totalActualHours;
   const laborCost = laborResult.laborCost;
+  const laborTax = laborResult.laborTax;
+  const laborCostTotal = laborResult.laborCostTotal;
   
   laborResult.dailyData.forEach(ld => {
     const d = ld.delivery;
@@ -4193,7 +4210,7 @@ function printInvoice() {
   
   const fuelLiters = fuel > 0 ? totalKm / fuel : 0;
   const fuelCost = Math.round(fuelLiters * fuelPrice);
-  const totalAmount = laborCost + fuelCost + totalExpense;
+  const totalAmount = laborCostTotal + fuelCost + totalExpense;
   
   const fmt = (n) => n.toLocaleString();
   const fmtH = (h) => h.toFixed(1);
