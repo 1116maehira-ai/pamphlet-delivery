@@ -545,14 +545,13 @@ function renderTable() {
   }
   if (currentZoneFilter !== 'all') facs = facs.filter(f => String(f.zone) === currentZoneFilter);
 
-  // 期間フィルター（「最新配布日」が期間に該当する施設のみ表示）
+  // 期間フィルター（期間内に1回でも配布があった施設のみ表示）
   if (currentPeriod !== 'all') {
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-    facs = facs.filter(f => {
-      const r = getLatestReport(f.id);
-      if (!r) return false;
-      const dDate = getDeliveryDate(r.delivery_id);
+    
+    // 期間判定関数
+    const isDateInPeriod = (dDate) => {
       if (!dDate) return false;
       
       if (currentPeriod === 'today') return dDate === todayStr;
@@ -581,6 +580,16 @@ function renderTable() {
       }
       
       return true;
+    };
+    
+    facs = facs.filter(f => {
+      // この施設に対する全reportsをチェック
+      const facReports = allReports.filter(r => r.fac_id === f.id);
+      // 期間内に1回でも配布報告があれば表示
+      return facReports.some(r => {
+        const dDate = getDeliveryDate(r.delivery_id);
+        return isDateInPeriod(dDate);
+      });
     });
   }
 
