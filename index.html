@@ -390,6 +390,8 @@ input[type=file] { display:none; }
     <div class="page" id="page-reports"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="14" height="18" rx="2" fill="#054c9c"/><path d="M8 7h8M8 11h8M8 15h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>日報・レポート</span></div><div id="reportsContent"></div></div>
 
     <div class="page" id="page-invoice"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" fill="#054c9c"/><path d="M7 8h10M7 12h10M7 16h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/><circle cx="17" cy="16" r="2" fill="#fbbf24"/></svg>請求書算出</span></div><div id="invoiceContent"></div></div>
+    <!-- DMM_INVOICE (DMM/I&S BBDO向け請求書) -->
+    <div class="page" id="page-dmm_invoice"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0891b2"/><path d="M7 8h10M7 12h10M7 16h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/><circle cx="17" cy="16" r="2" fill="#fde047"/></svg>DMM請求書（I&amp;S BBDO向け）</span></div><div id="dmmInvoiceContent"></div></div>
     <!-- PROFILE (担当者用) -->
     <div class="page" id="page-profile"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" fill="#054c9c"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="#054c9c" stroke-width="2" fill="none" stroke-linecap="round"/></svg>プロフィール</span></div><div id="profileContent"></div></div>
     <!-- ROUTE -->
@@ -1689,6 +1691,7 @@ const ADMIN_PAGES = [
   {id:'route',label:'route',text:'ルート'},
   {id:'reports',label:'report',text:'日報'},
   {id:'invoice',label:'invoice',text:'請求書'},
+  {id:'dmm_invoice',label:'invoice',text:'DMM請求'},
   {id:'contact',label:'bell',text:'お問い合わせ'},
 ];
 const STAFF_PAGES = [
@@ -1753,6 +1756,7 @@ function renderPage(id) {
     case 'route': renderRoute(); break;
     case 'reports': renderReports(); break;
     case 'invoice': renderInvoice(); break;
+    case 'dmm_invoice': renderDmmInvoice(); break;
     case 'profile': renderProfile(); break;
     case 'availability': renderAvailability(); break;
     case 'contact': renderContact(); break;
@@ -4161,6 +4165,501 @@ function renderInvoice() {
 // ============================================================
 // 労働時間の上書き（管理者用）
 // ============================================================
+// ============================================================
+// DMM請求書 (I&S BBDO向け、見積もり/請求書)
+// ============================================================
+
+// 月文字列をパース "YYYY-MM" → {year, month, prevYear, prevMonth}
+function parseDmmMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  let prevY = y, prevM = m - 1;
+  if (prevM === 0) { prevY = y - 1; prevM = 12; }
+  return { year: y, month: m, prevYear: prevY, prevMonth: prevM };
+}
+
+// 指定月の最初の日と最後の日（YYYY-MM-DD）
+function getMonthRange(year, month) {
+  const start = `${year}-${String(month).padStart(2,'0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const end = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  return { start, end };
+}
+
+// DMM請求書の計算
+function calculateDmmInvoice(mode, ym, staffId, unitPrice) {
+  const m = parseDmmMonth(ym);
+  
+  // 当月の範囲
+  const cur = getMonthRange(m.year, m.month);
+  // 前月の範囲（実費分）
+  const prev = getMonthRange(m.prevYear, m.prevMonth);
+  
+  // 担当者フィルター
+  const targetStaffIds = staffId === 'all' 
+    ? state.staff.map(s => s.id)
+    : [staffId];
+  
+  // === 当月の稼働日数 ===
+  let workDays = 0;
+  let workDaysBreakdown = [];  // {staffId, name, days}
+  
+  if (mode === 'estimate') {
+    // 見積もり: スケジュール（出勤可能日）から予定日を取得
+    targetStaffIds.forEach(sid => {
+      const staff = state.staff.find(s => s.id === sid);
+      if (!staff) return;
+      // schedules から該当月の予定日を取得
+      const sched = (state.schedules||[]).filter(s => 
+        s.staffId === sid && 
+        s.date >= cur.start && 
+        s.date <= cur.end
+      );
+      const days = sched.length;
+      workDays += days;
+      workDaysBreakdown.push({ staffId: sid, name: staff.name, emoji: staff.emoji, days });
+    });
+  } else {
+    // 請求書: 実際の稼働日（ended:true）を取得
+    targetStaffIds.forEach(sid => {
+      const staff = state.staff.find(s => s.id === sid);
+      if (!staff) return;
+      const deliveries = state.deliveries.filter(d =>
+        d.staffId === sid &&
+        d.ended === true &&
+        d.date >= cur.start &&
+        d.date <= cur.end
+      );
+      const days = deliveries.length;
+      workDays += days;
+      workDaysBreakdown.push({ staffId: sid, name: staff.name, emoji: staff.emoji, days });
+    });
+  }
+  
+  // === 前月の実費（燃料費 + 経費） ===
+  const fuelPrice = state.fuelPrice || 180;
+  let prevFuelCost = 0;
+  let prevExpense = 0;
+  let prevTotalKm = 0;
+  let prevExpenseList = [];
+  
+  targetStaffIds.forEach(sid => {
+    const staff = state.staff.find(s => s.id === sid);
+    if (!staff) return;
+    const fuel = staff.fuel || 8;
+    
+    const prevDeliveries = state.deliveries.filter(d =>
+      d.staffId === sid &&
+      d.ended === true &&
+      d.date >= prev.start &&
+      d.date <= prev.end
+    );
+    
+    let staffKm = 0;
+    prevDeliveries.forEach(d => {
+      const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
+      if (km > 0) staffKm += km;
+      
+      try {
+        JSON.parse(d.receipt_data || '[]').forEach(r => {
+          const amt = parseInt(r.amount) || 0;
+          prevExpense += amt;
+          if (amt > 0) prevExpenseList.push({
+            staffName: staff.name,
+            date: r.date || d.date,
+            place: r.place || '',
+            category: r.category || '',
+            amount: amt,
+          });
+        });
+      } catch(e) {}
+    });
+    
+    prevTotalKm += staffKm;
+    if (fuel > 0 && staffKm > 0) {
+      prevFuelCost += Math.round((staffKm / fuel) * fuelPrice);
+    }
+  });
+  
+  // === 計算 ===
+  const salesAmount = workDays * unitPrice;       // 販売金額（税抜）
+  const salesTax = Math.round(salesAmount * 0.1); // 消費税
+  const salesTotal = salesAmount + salesTax;       // 販売金額（税込）
+  const realCost = prevFuelCost + prevExpense;    // 実費（税なし）
+  const grandTotal = salesTotal + realCost;        // 合計請求額
+  
+  return {
+    mode, ym, m,
+    workDays, workDaysBreakdown,
+    salesAmount, salesTax, salesTotal,
+    prevFuelCost, prevExpense, prevTotalKm, prevExpenseList, realCost,
+    grandTotal,
+    unitPrice,
+    cur, prev,
+  };
+}
+
+function renderDmmInvoice() {
+  // state初期化
+  if (!state.dmmMode) state.dmmMode = 'estimate';  // 'estimate' or 'invoice'
+  if (!state.dmmStaffId) state.dmmStaffId = 'all';
+  if (!state.dmmMonth) {
+    const now = new Date();
+    state.dmmMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  if (!state.dmmUnitPrice) state.dmmUnitPrice = 20000;
+  
+  const fmt = (n) => n.toLocaleString();
+  const result = calculateDmmInvoice(state.dmmMode, state.dmmMonth, state.dmmStaffId, state.dmmUnitPrice);
+  
+  // 担当者選択肢
+  const staffOptions = `
+    <option value="all" ${state.dmmStaffId==='all'?'selected':''}>全員合算</option>
+    ${state.staff.map(s => 
+      `<option value="${s.id}" ${state.dmmStaffId===s.id?'selected':''}>${s.emoji||'👤'} ${s.name}</option>`
+    ).join('')}
+  `;
+  
+  let html = `
+    <div class="card">
+      <p style="font-size:12px;color:var(--slate-light);margin:0 0 14px;line-height:1.6;">
+        I&amp;S BBDO（DMM水族館パンフレット補充案件）向けの見積もり・請求書を作成します。<br>
+        <strong>販売単価</strong>: 稼働日数 × ¥${fmt(state.dmmUnitPrice)}（税別）／ <strong>実費</strong>: 前月分の燃料費・経費（税なし）
+      </p>
+      
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+        <div class="formGroup" style="margin:0;">
+          <label class="formLabel">種別</label>
+          <div style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+            <button class="btn ${state.dmmMode==='estimate'?'btn-primary':'btn-outline'}" style="border-radius:0;border:none;font-size:12px;padding:8px 14px;" onclick="state.dmmMode='estimate';renderDmmInvoice()">📋 見積もり</button>
+            <button class="btn ${state.dmmMode==='invoice'?'btn-primary':'btn-outline'}" style="border-radius:0;border:none;font-size:12px;padding:8px 14px;" onclick="state.dmmMode='invoice';renderDmmInvoice()">💰 請求書</button>
+          </div>
+        </div>
+        
+        <div class="formGroup" style="margin:0;">
+          <label class="formLabel">担当者</label>
+          <select class="formSelect" onchange="state.dmmStaffId=this.value;renderDmmInvoice()">
+            ${staffOptions}
+          </select>
+        </div>
+        
+        <div class="formGroup" style="margin:0;">
+          <label class="formLabel">対象月</label>
+          <input type="month" class="formInput" value="${state.dmmMonth}" onchange="state.dmmMonth=this.value;renderDmmInvoice()">
+        </div>
+        
+        <div class="formGroup" style="margin:0;">
+          <label class="formLabel">販売単価（¥/日）</label>
+          <input type="number" class="formInput" value="${state.dmmUnitPrice}" min="0" step="1000" onchange="state.dmmUnitPrice=parseInt(this.value)||20000;renderDmmInvoice()">
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // 結果サマリー
+  const modeLabel = state.dmmMode === 'estimate' ? '見積もり' : '請求書';
+  const workDayLabel = state.dmmMode === 'estimate' ? '稼働予定日数' : '稼働日数';
+  
+  html += `
+    <div class="card" style="background:linear-gradient(135deg,#ecfeff,#cffafe);border:2px solid #0891b2;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="font-size:28px;">${state.dmmMode==='estimate'?'📋':'💰'}</span>
+        <div>
+          <div style="font-size:18px;font-weight:800;color:#0891b2;">${result.m.year}年${result.m.month}月分 ${modeLabel}</div>
+          <div style="font-size:12px;color:#475569;">DMM水族館 パンフレット補充 案件 ／ ${state.dmmStaffId==='all'?'全員合算':state.staff.find(s=>s.id===state.dmmStaffId)?.name||''}</div>
+        </div>
+      </div>
+      
+      <div style="background:white;border-radius:12px;padding:16px;margin-bottom:14px;">
+        <!-- 販売単価部分 -->
+        <div style="border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px;">◾ 販売単価（${result.m.year}年${result.m.month}月稼働分）</div>
+          
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">
+            <div style="font-size:12px;color:#475569;">${workDayLabel}: <strong>${result.workDays}日</strong> × ¥${fmt(state.dmmUnitPrice)}</div>
+            <div style="font-size:16px;font-weight:700;color:#0891b2;">¥${fmt(result.salesAmount)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;">
+            <div style="font-size:11px;color:#64748b;">消費税（10%）</div>
+            <div style="font-size:13px;font-weight:600;color:#0891b2;">¥${fmt(result.salesTax)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;border-top:1px dashed #cbd5e1;">
+            <div style="font-size:12px;font-weight:600;color:#1e293b;">小計（税込）</div>
+            <div style="font-size:15px;font-weight:800;color:#0891b2;">¥${fmt(result.salesTotal)}</div>
+          </div>
+        </div>
+        
+        <!-- 実費部分 -->
+        <div style="border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px;">◾ 実費（${result.m.prevYear}年${result.m.prevMonth}月分） <span style="font-size:10px;font-weight:500;color:#94a3b8;">（税なし）</span></div>
+          
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">
+            <div style="font-size:12px;color:#475569;">燃料費 (${fmt(Math.round(result.prevTotalKm))}km分)</div>
+            <div style="font-size:14px;font-weight:600;color:#c2410c;">¥${fmt(result.prevFuelCost)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">
+            <div style="font-size:12px;color:#475569;">経費（駐車・高速など、${result.prevExpenseList.length}件）</div>
+            <div style="font-size:14px;font-weight:600;color:#7c3aed;">¥${fmt(result.prevExpense)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;border-top:1px dashed #cbd5e1;">
+            <div style="font-size:12px;font-weight:600;color:#1e293b;">実費 小計</div>
+            <div style="font-size:15px;font-weight:800;color:#7c3aed;">¥${fmt(result.realCost)}</div>
+          </div>
+        </div>
+        
+        <!-- 合計 -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
+          <div style="font-size:16px;font-weight:800;color:#0891b2;">💰 合計${modeLabel}金額</div>
+          <div style="font-size:26px;font-weight:900;color:#dc2626;">¥${fmt(result.grandTotal)}</div>
+        </div>
+        <div style="text-align:right;font-size:10px;color:#94a3b8;">（うち消費税 ¥${fmt(result.salesTax)}）</div>
+      </div>
+      
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="printDmmInvoice()">${icon('pdf')} ${modeLabel}PDF</button>
+      </div>
+    </div>
+  `;
+  
+  // 内訳カード（稼働日数 担当者ごと）
+  if (state.dmmStaffId === 'all' && result.workDaysBreakdown.length > 0) {
+    html += `
+      <div class="card">
+        <div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;">👥 担当者ごとの${workDayLabel}</span></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>担当者</th><th class="center">${workDayLabel}</th><th class="right">販売金額（税抜）</th></tr></thead>
+            <tbody>
+              ${result.workDaysBreakdown.filter(b => b.days > 0).map(b => `
+                <tr>
+                  <td>${b.emoji||'👤'} ${b.name}</td>
+                  <td style="text-align:center;font-weight:700;">${b.days}日</td>
+                  <td style="text-align:right;">¥${fmt(b.days * state.dmmUnitPrice)}</td>
+                </tr>
+              `).join('')}
+              <tr style="background:#f1f5f9;font-weight:800;">
+                <td>合計</td>
+                <td style="text-align:center;color:#0891b2;">${result.workDays}日</td>
+                <td style="text-align:right;color:#0891b2;">¥${fmt(result.salesAmount)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+  
+  // 実費明細
+  if (result.prevExpenseList.length > 0 || result.prevTotalKm > 0) {
+    html += `
+      <div class="card">
+        <div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;">💴 実費明細（${result.m.prevYear}年${result.m.prevMonth}月分）</span></div>
+        <p style="font-size:11px;color:var(--slate-light);margin-bottom:10px;">前月の実費は当月の${modeLabel}に加算されます</p>
+        ${result.prevTotalKm > 0 ? `
+          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;">
+            <strong>⛽ 燃料費</strong>: ${fmt(Math.round(result.prevTotalKm))}km × ¥${state.fuelPrice||180}/L = <strong style="color:#c2410c;">¥${fmt(result.prevFuelCost)}</strong>
+          </div>
+        ` : ''}
+        ${result.prevExpenseList.length > 0 ? `
+          <div class="tableWrap">
+            <table>
+              <thead><tr><th>日付</th>${state.dmmStaffId==='all'?'<th>担当者</th>':''}<th>場所・内容</th><th>カテゴリ</th><th class="right">金額</th></tr></thead>
+              <tbody>
+                ${result.prevExpenseList.sort((a,b)=>a.date.localeCompare(b.date)).map(e => `
+                  <tr>
+                    <td>${e.date}</td>
+                    ${state.dmmStaffId==='all'?`<td>${e.staffName}</td>`:''}
+                    <td>${e.place||'-'}</td>
+                    <td>${e.category||'-'}</td>
+                    <td class="right" style="font-weight:700;">¥${fmt(e.amount)}</td>
+                  </tr>
+                `).join('')}
+                <tr style="background:#f1f5f9;font-weight:800;">
+                  <td colspan="${state.dmmStaffId==='all'?4:3}">合計</td>
+                  <td class="right" style="color:#7c3aed;">¥${fmt(result.prevExpense)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+  
+  document.getElementById('dmmInvoiceContent').innerHTML = html;
+}
+
+// DMM請求書/見積もりPDF出力
+function printDmmInvoice() {
+  const result = calculateDmmInvoice(state.dmmMode, state.dmmMonth, state.dmmStaffId, state.dmmUnitPrice);
+  const fmt = (n) => n.toLocaleString();
+  const modeLabel = state.dmmMode === 'estimate' ? '見積書' : '請求書';
+  const workDayLabel = state.dmmMode === 'estimate' ? '稼働予定日数' : '稼働日数';
+  
+  // 番号
+  const today = new Date();
+  const docNo = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}-${state.dmmMode==='estimate'?'E':'I'}`;
+  
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${modeLabel} ${result.m.year}年${result.m.month}月 - I&S BBDO</title>
+<style>
+  @page { size: A4; margin: 15mm; }
+  body{font-family:'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif;color:#1e293b;max-width:900px;margin:0 auto;padding:30px;background:white;}
+  
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;}
+  h1{font-size:32px;color:#1e293b;margin:0 0 8px;letter-spacing:8px;text-align:center;flex:1;}
+  .doc-info{text-align:right;font-size:11px;color:#475569;}
+  .doc-info div{margin-bottom:3px;}
+  .doc-no{font-weight:700;}
+  
+  .billto-from{display:flex;justify-content:space-between;gap:20px;margin-bottom:24px;}
+  .billto{flex:1.2;}
+  .billto-label{font-size:11px;color:#64748b;font-weight:600;letter-spacing:2px;margin-bottom:6px;}
+  .billto-name{font-size:22px;font-weight:700;border-bottom:2px solid #1e293b;padding-bottom:8px;margin-bottom:12px;}
+  .billto-text{font-size:12px;line-height:1.7;color:#475569;}
+  
+  .from{flex:1;font-size:11px;line-height:1.7;color:#475569;border:1px solid #e2e8f0;padding:14px;border-radius:6px;background:#fafafa;}
+  .from-label{font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:1px;margin-bottom:6px;}
+  .from-name{font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+  .from-stamp{display:inline-block;width:36px;height:36px;border:2px solid #dc2626;border-radius:50%;color:#dc2626;font-size:9px;text-align:center;line-height:32px;font-weight:700;flex-shrink:0;}
+  
+  .subject{background:#f1f5f9;padding:10px 16px;border-radius:6px;margin-bottom:18px;font-size:13px;font-weight:600;}
+  .greeting{font-size:13px;margin-bottom:18px;}
+  
+  .total-box{background:#f1f5f9;border-left:6px solid #0891b2;padding:18px 24px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;}
+  .total-label{font-size:14px;font-weight:700;}
+  .total-value{font-size:32px;font-weight:900;color:#0891b2;}
+  .tax-note{font-size:10px;color:#64748b;text-align:right;margin-top:-18px;margin-bottom:18px;padding-right:24px;}
+  
+  h2{font-size:13px;border-bottom:2px solid #1e293b;padding-bottom:5px;margin-top:24px;margin-bottom:10px;}
+  table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;}
+  th{background:#f1f5f9;padding:7px 9px;text-align:left;border:1px solid #cbd5e1;font-weight:700;}
+  td{padding:7px 9px;border:1px solid #e2e8f0;}
+  .center{text-align:center;}
+  .right{text-align:right;}
+  .summary-table th{background:#1e293b;color:white;}
+  .summary-table .total-row{background:#fef9c3;font-weight:800;}
+  .summary-table .subtotal-row td{background:#f8fafc;}
+  
+  .footer-note{font-size:10px;color:#94a3b8;margin-top:30px;padding-top:14px;border-top:1px solid #e2e8f0;line-height:1.6;}
+  @media print{body{padding:0;}}
+</style>
+</head><body>
+
+<div class="header">
+  <h1>${state.dmmMode==='estimate'?'御　見　積　書':'請　求　書'}</h1>
+  <div class="doc-info">
+    <div class="doc-no">No. ${docNo}</div>
+    <div>発行日: ${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日</div>
+  </div>
+</div>
+
+<div class="billto-from">
+  <div class="billto">
+    <div class="billto-label">${state.dmmMode==='estimate'?'宛　先':'請　求　先'}</div>
+    <div class="billto-name">株式会社I&amp;S BBDO　御中</div>
+    <div class="billto-text">
+      下記の通り、${state.dmmMode==='estimate'?'お見積もりさせていただきます':'ご請求申し上げます'}。
+    </div>
+  </div>
+  
+  <div class="from">
+    <div class="from-label">${state.dmmMode==='estimate'?'発行者':'請　求　元'}</div>
+    <div class="from-name">株式会社TENOHIRA<span class="from-stamp">印</span></div>
+    沖縄県<br>
+    パンフレット配布管理<br>
+    <span style="font-size:10px;color:#94a3b8;">※ 詳細情報は別途</span>
+  </div>
+</div>
+
+<div class="subject">
+  【件名】 DMM水族館 パンフレット補充 案件 | ${result.m.year}年${result.m.month}月稼働分
+</div>
+
+<div class="greeting">下記の通り${state.dmmMode==='estimate'?'お見積もり':'ご請求'}申し上げます。</div>
+
+<div class="total-box">
+  <div class="total-label">${state.dmmMode==='estimate'?'お見積もり金額':'ご請求金額'}（税込）</div>
+  <div class="total-value">￥${fmt(result.grandTotal)}</div>
+</div>
+<div class="tax-note">うち消費税 ¥${fmt(result.salesTax)}</div>
+
+<h2>金額内訳</h2>
+<table class="summary-table">
+  <thead>
+    <tr><th>項目</th><th class="center">摘要</th><th class="right">金額</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>パンフレット補充業務</strong></td>
+      <td class="center" style="font-size:10px;">${result.m.year}年${result.m.month}月 / ${workDayLabel}: ${result.workDays}日 × ¥${fmt(state.dmmUnitPrice)}</td>
+      <td class="right">¥${fmt(result.salesAmount)}</td>
+    </tr>
+    <tr class="subtotal-row">
+      <td style="padding-left:24px;font-size:10px;">消費税（10%）</td>
+      <td class="center" style="font-size:10px;">業務料金に対する消費税</td>
+      <td class="right">¥${fmt(result.salesTax)}</td>
+    </tr>
+    <tr>
+      <td><strong>燃料費</strong> <span style="font-size:9px;color:#94a3b8;">（税なし）</span></td>
+      <td class="center" style="font-size:10px;">${result.m.prevYear}年${result.m.prevMonth}月分 / ${fmt(Math.round(result.prevTotalKm))}km × ¥${state.fuelPrice||180}/L</td>
+      <td class="right">¥${fmt(result.prevFuelCost)}</td>
+    </tr>
+    <tr>
+      <td><strong>諸経費</strong> <span style="font-size:9px;color:#94a3b8;">（税なし）</span></td>
+      <td class="center" style="font-size:10px;">${result.m.prevYear}年${result.m.prevMonth}月分 / 駐車・高速料金等 ${result.prevExpenseList.length}件</td>
+      <td class="right">¥${fmt(result.prevExpense)}</td>
+    </tr>
+    <tr class="total-row">
+      <td colspan="2" class="right">合 計</td>
+      <td class="right" style="font-size:14px;">¥${fmt(result.grandTotal)}</td>
+    </tr>
+  </tbody>
+</table>
+
+${result.workDaysBreakdown.filter(b=>b.days>0).length > 1 ? `
+<h2>担当者ごとの${workDayLabel}</h2>
+<table>
+  <thead><tr><th>担当者</th><th class="center">${workDayLabel}</th><th class="right">業務料金</th></tr></thead>
+  <tbody>
+    ${result.workDaysBreakdown.filter(b=>b.days>0).map(b=>`
+      <tr>
+        <td>${b.name}</td>
+        <td class="center">${b.days}日</td>
+        <td class="right">¥${fmt(b.days * state.dmmUnitPrice)}</td>
+      </tr>
+    `).join('')}
+    <tr style="background:#f1f5f9;font-weight:800;">
+      <td>合計</td>
+      <td class="center">${result.workDays}日</td>
+      <td class="right">¥${fmt(result.salesAmount)}</td>
+    </tr>
+  </tbody>
+</table>
+` : ''}
+
+${result.prevExpenseList.length > 0 ? `
+<h2>諸経費明細（${result.m.prevYear}年${result.m.prevMonth}月分）</h2>
+<table>
+  <thead><tr><th>日付</th>${state.dmmStaffId==='all'?'<th>担当者</th>':''}<th>場所・内容</th><th>カテゴリ</th><th class="right">金額</th></tr></thead>
+  <tbody>
+    ${result.prevExpenseList.sort((a,b)=>a.date.localeCompare(b.date)).map(e=>`
+      <tr><td>${e.date}</td>${state.dmmStaffId==='all'?`<td>${e.staffName}</td>`:''}<td>${e.place||'-'}</td><td>${e.category||'-'}</td><td class="right"><strong>¥${fmt(e.amount)}</strong></td></tr>
+    `).join('')}
+    <tr style="background:#f1f5f9;font-weight:800;"><td colspan="${state.dmmStaffId==='all'?4:3}" class="right">合計</td><td class="right">¥${fmt(result.prevExpense)}</td></tr>
+  </tbody>
+</table>
+` : ''}
+
+<div class="footer-note">
+  ${state.dmmMode==='estimate' ? '本見積書の有効期限は発行日より30日間とさせていただきます。' : '本請求書記載の口座へお振込くださいますようお願い申し上げます。'}<br>
+  本書はTENOHIRA配布管理システムにより自動生成されています。
+</div>
+
+<script>setTimeout(()=>window.print(), 500);<\/script>
+</body></html>`);
+  win.document.close();
+}
+
 function openOverrideModal(deliveryId) {
   const d = state.deliveries.find(x => x.id === deliveryId);
   if (!d) {
