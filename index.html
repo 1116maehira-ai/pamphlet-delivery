@@ -3387,8 +3387,8 @@ function renderReports() {
   const sorted = [...deliveries].sort((a,b)=>a.date>b.date?-1:1);
   
   // ===== パンフ種別累計の集計 =====
-  // 各 delivery → reports → r.pamph_count（種別別の枚数）を集計
-  // pamph_count は { ja: 10, en: 5, zh: 3 } のような形式（種別ID -> 数）の想定
+  // pamph_detail カラムが種別ごとの枚数のJSON（例: {"繁":50,"日":50,"日A4":10}）
+  // pamph_count は合計値の数値だが、pamph_detailの合計を使う方が正確
   const pamphTotals = {};
   let totalDeliveries = 0;
   let totalKm = 0;
@@ -3400,23 +3400,27 @@ function renderReports() {
     if (km > 0) totalKm += km;
     reports.forEach(r => {
       if (r.status === 'done') totalFacilities++;
-      // pamph_count を集計
-      let pamphData = null;
-      if (r.pamph_count) {
-        if (typeof r.pamph_count === 'string') {
-          try { pamphData = JSON.parse(r.pamph_count); } catch(e) { pamphData = null; }
-        } else if (typeof r.pamph_count === 'object') {
-          pamphData = r.pamph_count;
+      // pamph_detail（種別ごとの枚数）を集計
+      let pamphDetail = null;
+      if (r.pamph_detail) {
+        if (typeof r.pamph_detail === 'string') {
+          try { pamphDetail = JSON.parse(r.pamph_detail); } catch(e) { pamphDetail = null; }
+        } else if (typeof r.pamph_detail === 'object') {
+          pamphDetail = r.pamph_detail;
         }
       }
-      if (pamphData && typeof pamphData === 'object') {
-        Object.entries(pamphData).forEach(([key, val]) => {
+      if (pamphDetail && typeof pamphDetail === 'object') {
+        Object.entries(pamphDetail).forEach(([key, val]) => {
           const n = parseInt(val) || 0;
           if (n > 0) {
             pamphTotals[key] = (pamphTotals[key] || 0) + n;
             totalDeliveries += n;
           }
         });
+      } else if (r.pamph_count) {
+        // pamph_detailが無い古いデータは pamph_count を合計だけ加算（種別不明）
+        const n = parseInt(r.pamph_count) || 0;
+        if (n > 0) totalDeliveries += n;
       }
     });
   });
@@ -3526,22 +3530,26 @@ function renderReports() {
       const dayPamphTotals = {};
       let dayTotalSheets = 0;
       reports.forEach(r => {
-        let pamphData = null;
-        if (r.pamph_count) {
-          if (typeof r.pamph_count === 'string') {
-            try { pamphData = JSON.parse(r.pamph_count); } catch(e) { pamphData = null; }
-          } else if (typeof r.pamph_count === 'object') {
-            pamphData = r.pamph_count;
+        let pamphDetail = null;
+        if (r.pamph_detail) {
+          if (typeof r.pamph_detail === 'string') {
+            try { pamphDetail = JSON.parse(r.pamph_detail); } catch(e) { pamphDetail = null; }
+          } else if (typeof r.pamph_detail === 'object') {
+            pamphDetail = r.pamph_detail;
           }
         }
-        if (pamphData && typeof pamphData === 'object') {
-          Object.entries(pamphData).forEach(([key, val]) => {
+        if (pamphDetail && typeof pamphDetail === 'object') {
+          Object.entries(pamphDetail).forEach(([key, val]) => {
             const n = parseInt(val) || 0;
             if (n > 0) {
               dayPamphTotals[key] = (dayPamphTotals[key] || 0) + n;
               dayTotalSheets += n;
             }
           });
+        } else if (r.pamph_count) {
+          // pamph_detailが無い古いデータは pamph_count を合計だけ加算（種別不明）
+          const n = parseInt(r.pamph_count) || 0;
+          if (n > 0) dayTotalSheets += n;
         }
       });
       const dayPamphKeys = Object.keys(dayPamphTotals);
