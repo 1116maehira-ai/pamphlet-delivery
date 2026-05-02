@@ -3344,10 +3344,176 @@ function buildGoogleMapsUrl(facs, origin) {
 function renderReports() {
   const uid = state.currentUser.id;
   const isAdmin = state.currentUser.type === 'admin';
-  const deliveries = isAdmin ? state.deliveries : state.deliveries.filter(d=>d.staffId===uid);
+  const allDeliveries = isAdmin ? state.deliveries : state.deliveries.filter(d=>d.staffId===uid);
+  
+  // ===== フィルター state 初期化 =====
+  if (!state.reportPeriod) state.reportPeriod = 'all';      // all/today/week/month/custom
+  if (!state.reportStartDate) state.reportStartDate = '';
+  if (!state.reportEndDate) state.reportEndDate = '';
+  if (!state.reportStaffFilter) state.reportStaffFilter = 'all';
+  
+  // ===== 期間フィルター適用 =====
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const filterByPeriod = (d) => {
+    if (state.reportPeriod === 'all') return true;
+    if (state.reportPeriod === 'today') return d.date === todayStr;
+    if (state.reportPeriod === 'week') {
+      const dayOfWeek = today.getDay(); // 0=日, 1=月...
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+      return d.date >= mondayStr && d.date <= todayStr;
+    }
+    if (state.reportPeriod === 'month') {
+      const ym = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+      return d.date.startsWith(ym);
+    }
+    if (state.reportPeriod === 'custom') {
+      if (state.reportStartDate && d.date < state.reportStartDate) return false;
+      if (state.reportEndDate && d.date > state.reportEndDate) return false;
+      return true;
+    }
+    return true;
+  };
+  
+  // ===== 担当者フィルター =====
+  const filterByStaff = (d) => {
+    if (state.reportStaffFilter === 'all') return true;
+    return d.staffId === state.reportStaffFilter;
+  };
+  
+  const deliveries = allDeliveries.filter(d => filterByPeriod(d) && filterByStaff(d));
   const sorted = [...deliveries].sort((a,b)=>a.date>b.date?-1:1);
-  document.getElementById('reportsContent').innerHTML = `<div class="card"><div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="14" height="18" rx="2" fill="#054c9c"/><path d="M8 7h8M8 11h8M8 15h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>日報一覧</span></div>
-    ${sorted.length===0 ? '<p style="color:var(--slate-light);font-size:13px;">日報なし</p>' :
+  
+  // ===== パンフ種別累計の集計 =====
+  // 各 delivery → reports → r.pamph_count（種別別の枚数）を集計
+  // pamph_count は { ja: 10, en: 5, zh: 3 } のような形式（種別ID -> 数）の想定
+  const pamphTotals = {};
+  let totalDeliveries = 0;
+  let totalKm = 0;
+  let totalFacilities = 0;
+  
+  sorted.forEach(d => {
+    const reports = d.reports || [];
+    const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
+    if (km > 0) totalKm += km;
+    reports.forEach(r => {
+      if (r.status === 'done') totalFacilities++;
+      // pamph_count を集計
+      let pamphData = null;
+      if (r.pamph_count) {
+        if (typeof r.pamph_count === 'string') {
+          try { pamphData = JSON.parse(r.pamph_count); } catch(e) { pamphData = null; }
+        } else if (typeof r.pamph_count === 'object') {
+          pamphData = r.pamph_count;
+        }
+      }
+      if (pamphData && typeof pamphData === 'object') {
+        Object.entries(pamphData).forEach(([key, val]) => {
+          const n = parseInt(val) || 0;
+          if (n > 0) {
+            pamphTotals[key] = (pamphTotals[key] || 0) + n;
+            totalDeliveries += n;
+          }
+        });
+      }
+    });
+  });
+  
+  // パンフ種別マスタ（state.pamphTypesから名称取得）
+  const getPamphName = (key) => {
+    const t = (state.pamphTypes || []).find(t => t.id === key || t.short_name === key || t.name === key);
+    return t ? t.name : key;
+  };
+  
+  // ===== UI構築 =====
+  // フィルターUI
+  const periodOptions = [
+    {id:'all', label:'全期間'},
+    {id:'today', label:'今日'},
+    {id:'week', label:'今週'},
+    {id:'month', label:'今月'},
+    {id:'custom', label:'期間指定'},
+  ];
+  const filterUI = `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      <span style="font-size:12px;color:var(--slate-mid);font-weight:600;align-self:center;">期間:</span>
+      ${periodOptions.map(p => {
+        const isActive = state.reportPeriod === p.id;
+        return `<button onclick="state.reportPeriod='${p.id}';renderReports()" style="padding:5px 12px;border-radius:100px;border:1.5px solid ${isActive?'#033a78':'#dce8f8'};background:${isActive?'#054c9c':'white'};color:${isActive?'white':'#4a5568'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">${p.label}</button>`;
+      }).join('')}
+    </div>
+    ${state.reportPeriod === 'custom' ? `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <span style="font-size:12px;color:var(--slate-mid);">開始:</span>
+      <input type="date" value="${state.reportStartDate}" onchange="state.reportStartDate=this.value;renderReports()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;">
+      <span style="font-size:12px;color:var(--slate-mid);">終了:</span>
+      <input type="date" value="${state.reportEndDate}" onchange="state.reportEndDate=this.value;renderReports()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;">
+    </div>` : ''}
+    ${isAdmin ? `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+      <span style="font-size:12px;color:var(--slate-mid);font-weight:600;align-self:center;">担当者:</span>
+      <button onclick="state.reportStaffFilter='all';renderReports()" style="padding:5px 12px;border-radius:100px;border:1.5px solid ${state.reportStaffFilter==='all'?'#033a78':'#dce8f8'};background:${state.reportStaffFilter==='all'?'#054c9c':'white'};color:${state.reportStaffFilter==='all'?'white':'#4a5568'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">全員</button>
+      ${state.staff.map(s => {
+        const isActive = state.reportStaffFilter === s.id;
+        return `<button onclick="state.reportStaffFilter='${s.id}';renderReports()" style="padding:5px 12px;border-radius:100px;border:1.5px solid ${isActive?'#033a78':'#dce8f8'};background:${isActive?'#054c9c':'white'};color:${isActive?'white':'#4a5568'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">${s.emoji||'👤'} ${s.name}</button>`;
+      }).join('')}
+    </div>` : ''}
+  `;
+  
+  // パンフ種別累計サマリーUI
+  const pamphTotalKeys = Object.keys(pamphTotals);
+  const summaryUI = `
+    <div style="background:linear-gradient(135deg,#e0f2fe,#f0f9ff);border:2px solid #054c9c;border-radius:14px;padding:14px 16px;margin-bottom:18px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:22px;">📊</span>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:800;color:#054c9c;">期間集計サマリー</div>
+          <div style="font-size:11px;color:#475569;margin-top:2px;">${
+            state.reportPeriod === 'all' ? '全期間' :
+            state.reportPeriod === 'today' ? '今日' :
+            state.reportPeriod === 'week' ? '今週' :
+            state.reportPeriod === 'month' ? '今月' :
+            `${state.reportStartDate || '?'} 〜 ${state.reportEndDate || '?'}`
+          }${state.reportStaffFilter !== 'all' ? ' / 担当: ' + (state.staff.find(s=>s.id===state.reportStaffFilter)?.name || '?') : ''}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));gap:10px;margin-bottom:10px;">
+        <div style="background:white;padding:10px 12px;border-radius:10px;border:1px solid #cbd5e1;">
+          <div style="font-size:11px;color:#6b7280;font-weight:600;">日報件数</div>
+          <div style="font-size:20px;font-weight:800;color:#054c9c;">${sorted.length}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">件</span></div>
+        </div>
+        <div style="background:white;padding:10px 12px;border-radius:10px;border:1px solid #cbd5e1;">
+          <div style="font-size:11px;color:#6b7280;font-weight:600;">配布施設</div>
+          <div style="font-size:20px;font-weight:800;color:#166534;">${totalFacilities}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">件</span></div>
+        </div>
+        <div style="background:white;padding:10px 12px;border-radius:10px;border:1px solid #cbd5e1;">
+          <div style="font-size:11px;color:#6b7280;font-weight:600;">配布枚数合計</div>
+          <div style="font-size:20px;font-weight:800;color:#b91c1c;">${totalDeliveries.toLocaleString()}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">枚</span></div>
+        </div>
+        <div style="background:white;padding:10px 12px;border-radius:10px;border:1px solid #cbd5e1;">
+          <div style="font-size:11px;color:#6b7280;font-weight:600;">総走行距離</div>
+          <div style="font-size:20px;font-weight:800;color:#c2410c;">${Math.round(totalKm).toLocaleString()}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">km</span></div>
+        </div>
+      </div>
+      ${pamphTotalKeys.length > 0 ? `
+      <div style="background:white;padding:10px 12px;border-radius:10px;border:1px solid #cbd5e1;">
+        <div style="font-size:12px;font-weight:700;color:#054c9c;margin-bottom:6px;">📚 パンフレット種別累計</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${pamphTotalKeys.sort((a,b)=>pamphTotals[b]-pamphTotals[a]).map(k => `
+            <span style="background:#dbeafe;color:#1e40af;font-size:12px;font-weight:700;padding:5px 12px;border-radius:100px;">
+              ${getPamphName(k)}: ${pamphTotals[k].toLocaleString()}枚
+            </span>
+          `).join('')}
+        </div>
+      </div>
+      ` : ''}
+    </div>
+  `;
+  
+  // 各日報のレンダリング
+  const reportsList = sorted.length===0 ? '<p style="color:var(--slate-light);font-size:13px;padding:20px;text-align:center;">該当する日報はありません</p>' :
     sorted.map(d => {
       const staff = state.staff.find(s=>s.id===d.staffId);
       const reports = d.reports||[];
@@ -3355,6 +3521,43 @@ function renderReports() {
       const km = (parseFloat(d.endKm)||0)-(parseFloat(d.startKm)||0);
       const fuelCost = staff ? Math.round(km/(staff.fuel||15)*(state.fuelPrice||170)) : 0;
       const zone = state.schedules.find(s=>s.staffId===d.staffId&&s.date===d.date)?.zoneId || staff?.zone;
+      
+      // この日のパンフ種別集計
+      const dayPamphTotals = {};
+      let dayTotalSheets = 0;
+      reports.forEach(r => {
+        let pamphData = null;
+        if (r.pamph_count) {
+          if (typeof r.pamph_count === 'string') {
+            try { pamphData = JSON.parse(r.pamph_count); } catch(e) { pamphData = null; }
+          } else if (typeof r.pamph_count === 'object') {
+            pamphData = r.pamph_count;
+          }
+        }
+        if (pamphData && typeof pamphData === 'object') {
+          Object.entries(pamphData).forEach(([key, val]) => {
+            const n = parseInt(val) || 0;
+            if (n > 0) {
+              dayPamphTotals[key] = (dayPamphTotals[key] || 0) + n;
+              dayTotalSheets += n;
+            }
+          });
+        }
+      });
+      const dayPamphKeys = Object.keys(dayPamphTotals);
+      const dayPamphHtml = dayPamphKeys.length > 0 ? `
+        <div style="margin-top:8px;padding:8px 10px;background:#f0f9ff;border-radius:8px;border:1px solid #bfdbfe;">
+          <div style="font-size:11px;font-weight:700;color:#054c9c;margin-bottom:5px;">📚 この日のパンフ種別: <span style="color:#b91c1c;">合計${dayTotalSheets}枚</span></div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            ${dayPamphKeys.sort((a,b)=>dayPamphTotals[b]-dayPamphTotals[a]).map(k => `
+              <span style="background:white;color:#1e40af;font-size:11px;font-weight:700;padding:2px 8px;border-radius:100px;border:1px solid #bfdbfe;">
+                ${getPamphName(k)}: ${dayPamphTotals[k]}枚
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
+      
       return `<div class="facilityCard" style="margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
           <div><div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px;"><rect x="3" y="4" width="18" height="17" rx="2" fill="#054c9c"/><path d="M8 2v4M16 2v4M3 10h18" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>${d.date}</div>
@@ -3371,6 +3574,7 @@ function renderReports() {
           <div class="infoRow"><span class="infoLabel">燃料単価</span><span class="infoVal">${state.fuelPrice||170}円/L</span></div>
           <div class="infoRow"><span class="infoLabel">配布完了</span><span class="infoVal">${done}件</span></div>
         </div>
+        ${dayPamphHtml}
         ${(() => {
           const mStart = (() => { try { return JSON.parse(d.meter_start_photos||'[]'); } catch(e){ return []; } })();
           const mEnd = (() => { try { return JSON.parse(d.meter_end_photos||'[]'); } catch(e){ return []; } })();
@@ -3390,8 +3594,16 @@ function renderReports() {
           <div id="reportFacs_${d.id}" class="tableWrap">${buildReportTable(reports,'all')}</div>
         </div>` : ''}
       </div>`;
-    }).join('')}
-  </div>`;
+    }).join('');
+  
+  document.getElementById('reportsContent').innerHTML = `
+    <div class="card">
+      <div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="14" height="18" rx="2" fill="#054c9c"/><path d="M8 7h8M8 11h8M8 15h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>日報・レポート</span></div>
+      ${filterUI}
+      ${summaryUI}
+      ${reportsList}
+    </div>
+  `;
 }
 function buildReportTable(reports, genre) {
   const isAdmin = state.currentUser.type === 'admin';
