@@ -3693,6 +3693,25 @@ function timeStrToMinutes(t) {
   return h * 60 + m;
 }
 
+// 50分〜70分を1時間として丸める
+// 例: 1h0m=1.0, 1h10m=1.0(70分まで), 1h11m=1.18(端数), 1h50m=1.83, 2h=2.0
+// 厳密には: hour単位の小数で、各時間境界の前50〜後10分を1時間境界とみなす
+// シンプルに: 「(分 / 60)」で計算した時間を、最も近い「整数 + 50分〜70分」のルールで補正
+// 実装: 端数が0:50〜1:10の範囲（つまり0.83〜1.17時間相当）なら丸め込む
+function roundHours(diffMinutes) {
+  if (diffMinutes <= 0) return 0;
+  const hours = diffMinutes / 60;
+  // 整数部分と端数を確認
+  const intPart = Math.floor(hours);
+  const frac = hours - intPart;
+  // 端数が 50分〜60分（0.833〜1.0）→ 切り上げて intPart+1 にする
+  if (frac >= 50/60) return intPart + 1;
+  // 端数が 0分〜10分（0〜0.167）→ 切り下げて intPart にする
+  if (frac <= 10/60) return intPart;
+  // それ以外は実際の時間（小数1桁で丸め）
+  return Math.round(hours * 10) / 10;
+}
+
 // 日報1件の実労時間を計算（時間単位、小数）
 // 8時間でキャップ
 function getDeliveryHours(d) {
@@ -3701,9 +3720,96 @@ function getDeliveryHours(d) {
   if (startMin == null || endMin == null) return { actual: 0, capped: 0 };
   let diffMin = endMin - startMin;
   if (diffMin < 0) diffMin += 24 * 60; // 日跨ぎ対応
-  const actualHours = diffMin / 60;
+  const actualHours = roundHours(diffMin);  // 50-70分丸め
   const cappedHours = Math.min(actualHours, 8);
   return { actual: actualHours, capped: cappedHours };
+}
+
+// 月全体の人件費計算（補填ロジック含む）
+// deliveries: 期間内のended:trueな日報一覧（日付順）
+// hourly: 時給
+// 戻り値: { dailyData, totalCappedHours, totalActualHours, summary }
+function calculateLaborCost(deliveries, hourly) {
+  // 各日を分類
+  // - invalid: 0〜3h未満 (0時間として扱う)
+  // - hojuu:   3〜5h (補填候補、ペアで合算)
+  // - normal:  5h超〜8h (そのまま)
+  // - capped:  8h超 (8hキャップ)
+  const dailyData = deliveries.map(d => {
+    const hours = getDeliveryHours(d);
+    let category, finalHours, note;
+    if (hours.actual < 3) {
+      category = 'invalid';
+      finalHours = 0;
+      note = hours.actual > 0 ? `${hours.actual}h（3h未満のため無効）` : '無効';
+    } else if (hours.actual <= 5) {
+      category = 'hojuu';
+      finalHours = hours.actual;  // 後でペア処理する
+      note = '補填候補';
+    } else if (hours.actual <= 8) {
+      category = 'normal';
+      finalHours = hours.actual;
+      note = '';
+    } else {
+      category = 'capped';
+      finalHours = 8;
+      note = `実${hours.actual}h → 8hキャップ`;
+    }
+    return {
+      delivery: d,
+      date: d.date,
+      startTime: d.startTime || '-',
+      endTime: d.endTime || '-',
+      actualHours: hours.actual,
+      category,
+      finalHours,
+      note,
+      pairedWith: null,  // 補填ペア相手の日付
+    };
+  });
+  
+  // 補填候補を日付順にペアリング
+  const hojuuDays = dailyData.filter(d => d.category === 'hojuu');
+  for (let i = 0; i + 1 < hojuuDays.length; i += 2) {
+    const d1 = hojuuDays[i];
+    const d2 = hojuuDays[i+1];
+    const sumHours = d1.actualHours + d2.actualHours;
+    const cappedSum = Math.min(sumHours, 8);
+    // ペアの請求時間は合計を半分ずつにする（表示上）か、片方に寄せる
+    // → 片方（最初の日）に合算分を寄せて、相手は0にする方が分かりやすい
+    // ただし表示上はそれぞれの請求対象を正しく出したい
+    // 解決策: 合算をそのまま2日に「按分」する（実労比率で）
+    if (sumHours > 0) {
+      d1.finalHours = Math.round((d1.actualHours / sumHours) * cappedSum * 10) / 10;
+      d2.finalHours = Math.round((d2.actualHours / sumHours) * cappedSum * 10) / 10;
+      // 浮動小数点の誤差調整
+      const diff = cappedSum - (d1.finalHours + d2.finalHours);
+      if (Math.abs(diff) > 0.01) d1.finalHours += diff;
+    }
+    d1.note = `補填①（${d2.date}と合算: ${d1.actualHours}h+${d2.actualHours}h=${sumHours}h${sumHours>8?' → 8hキャップ':''}）`;
+    d2.note = `補填②（${d1.date}とペア）`;
+    d1.pairedWith = d2.date;
+    d2.pairedWith = d1.date;
+  }
+  // 補填候補が奇数個で余った日があれば、そのまま単独で
+  if (hojuuDays.length % 2 === 1) {
+    const lastSingle = hojuuDays[hojuuDays.length - 1];
+    if (!lastSingle.pairedWith) {
+      lastSingle.note = '補填候補（ペア相手なし、単独計上）';
+    }
+  }
+  
+  // 集計
+  const totalCappedHours = dailyData.reduce((s, d) => s + d.finalHours, 0);
+  const totalActualHours = dailyData.reduce((s, d) => s + d.actualHours, 0);
+  const laborCost = Math.round(hourly * totalCappedHours);
+  
+  return {
+    dailyData,
+    totalCappedHours,
+    totalActualHours,
+    laborCost,
+  };
 }
 
 function renderInvoice() {
@@ -3789,18 +3895,19 @@ function renderInvoice() {
   const hourly = staff.hourly_wage || 0;
   const fuel = staff.fuel || 8;
   
-  let totalCappedHours = 0;
-  let totalActualHours = 0;
+  // 人件費計算（補填ロジック含む）
+  const laborResult = calculateLaborCost(deliveries, hourly);
+  const totalCappedHours = laborResult.totalCappedHours;
+  const totalActualHours = laborResult.totalActualHours;
+  const laborCost = laborResult.laborCost;
+  
   let totalKm = 0;
   let totalExpense = 0;
   const dailyData = [];
   const expenseList = [];
   
-  deliveries.forEach(d => {
-    const hours = getDeliveryHours(d);
-    totalCappedHours += hours.capped;
-    totalActualHours += hours.actual;
-    
+  laborResult.dailyData.forEach(ld => {
+    const d = ld.delivery;
     const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
     if (km > 0) totalKm += km;
     
@@ -3824,17 +3931,19 @@ function renderInvoice() {
     totalExpense += dayExpense;
     
     dailyData.push({
-      date: d.date,
-      startTime: d.startTime || '-',
-      endTime: d.endTime || '-',
-      actualHours: hours.actual,
-      cappedHours: hours.capped,
+      date: ld.date,
+      startTime: ld.startTime,
+      endTime: ld.endTime,
+      actualHours: ld.actualHours,
+      cappedHours: ld.finalHours,
+      category: ld.category,
+      note: ld.note,
+      pairedWith: ld.pairedWith,
       km: km,
       expense: dayExpense,
     });
   });
   
-  const laborCost = Math.round(hourly * totalCappedHours);
   const fuelLiters = fuel > 0 ? totalKm / fuel : 0;
   const fuelCost = Math.round(fuelLiters * fuelPrice);
   const totalAmount = laborCost + fuelCost + totalExpense;
@@ -3900,6 +4009,9 @@ function renderInvoice() {
   html += `
     <div class="card">
       <div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;">📅 日別明細</span></div>
+      <div style="font-size:11px;color:var(--slate-light);margin-bottom:10px;line-height:1.6;">
+        💡 <strong>計算ルール</strong>：3h未満は無効（0h扱い）／3〜5hは補填候補（日付順に2日でペア合算→8hキャップ）／5h超〜8hはそのまま／8h超は8hキャップ／時間は50〜70分=1時間で丸め
+      </div>
       <div class="tableWrap">
         <table>
           <thead><tr>
@@ -3907,6 +4019,7 @@ function renderInvoice() {
             <th class="center">開始</th>
             <th class="center">終了</th>
             <th class="center">実労</th>
+            <th class="center">分類</th>
             <th class="center">請求対象</th>
             <th class="center">走行</th>
             <th class="center">経費</th>
@@ -3914,12 +4027,21 @@ function renderInvoice() {
           </tr></thead>
           <tbody>
             ${dailyData.map(d => {
-              const overtime = d.actualHours > d.cappedHours;
+              const catBadge = (() => {
+                if (d.category === 'invalid') return '<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;">❌ 無効</span>';
+                if (d.category === 'hojuu') return d.pairedWith
+                  ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;">🔄 補填</span>'
+                  : '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;">🔄 補填(単独)</span>';
+                if (d.category === 'capped') return '<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;">⚠️ 残業カット</span>';
+                return '<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;">✓ 確定</span>';
+              })();
+              const noteHtml = d.note ? `<div style="font-size:10px;color:#94a3b8;margin-top:2px;">${d.note}</div>` : '';
               return `<tr>
                 <td style="font-weight:600;">${d.date}</td>
                 <td style="text-align:center;font-size:12px;">${d.startTime}</td>
                 <td style="text-align:center;font-size:12px;">${d.endTime}</td>
-                <td style="text-align:center;font-size:12px;${overtime?'color:#dc2626;':''}">${fmtH(d.actualHours)}h${overtime?' ⚠️':''}</td>
+                <td style="text-align:center;font-size:12px;">${fmtH(d.actualHours)}h</td>
+                <td style="text-align:center;">${catBadge}${noteHtml}</td>
                 <td style="text-align:center;font-weight:700;color:#7c3aed;">${fmtH(d.cappedHours)}h</td>
                 <td style="text-align:center;font-size:12px;">${d.km>0?d.km+'km':'-'}</td>
                 <td style="text-align:center;font-size:12px;">${d.expense>0?'¥'+fmt(d.expense):'-'}</td>
@@ -3983,9 +4105,7 @@ function setInvoicePeriod(preset) {
 function exportInvoiceCsv() {
   const staff = state.staff.find(s => s.id === state.invoiceStaffId);
   if (!staff) return;
-  const fuelPrice = state.fuelPrice || 180;
   const hourly = staff.hourly_wage || 0;
-  const fuel = staff.fuel || 8;
   
   const deliveries = state.deliveries.filter(d => 
     d.staffId === state.invoiceStaffId &&
@@ -3994,16 +4114,20 @@ function exportInvoiceCsv() {
     d.date <= state.invoicePeriodEnd
   ).sort((a,b) => a.date.localeCompare(b.date));
   
-  let csv = '日付,開始,終了,実労時間,請求対象時間,走行km,経費,人件費\n';
-  deliveries.forEach(d => {
-    const hours = getDeliveryHours(d);
+  const labor = calculateLaborCost(deliveries, hourly);
+  
+  let csv = '日付,開始,終了,実労時間,分類,請求対象時間,走行km,経費,人件費,備考\n';
+  labor.dailyData.forEach(ld => {
+    const d = ld.delivery;
     const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
     let dayExpense = 0;
     try {
       JSON.parse(d.receipt_data || '[]').forEach(r => { dayExpense += parseInt(r.amount) || 0; });
     } catch(e) {}
-    const dayLabor = Math.round(hourly * hours.capped);
-    csv += `${d.date},${d.startTime||''},${d.endTime||''},${hours.actual.toFixed(1)},${hours.capped.toFixed(1)},${km>0?km:0},${dayExpense},${dayLabor}\n`;
+    const dayLabor = Math.round(hourly * ld.finalHours);
+    const catLabel = {invalid:'無効', hojuu:'補填', normal:'確定', capped:'残業カット'}[ld.category] || '';
+    const noteEscaped = (ld.note || '').replace(/,/g, '、');
+    csv += `${ld.date},${ld.startTime},${ld.endTime},${ld.actualHours.toFixed(1)},${catLabel},${ld.finalHours.toFixed(1)},${km>0?km:0},${dayExpense},${dayLabor},${noteEscaped}\n`;
   });
   
   const blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'});
@@ -4030,17 +4154,19 @@ function printInvoice() {
     d.date <= state.invoicePeriodEnd
   ).sort((a,b) => a.date.localeCompare(b.date));
   
-  let totalCappedHours = 0;
-  let totalActualHours = 0;
   let totalKm = 0;
   let totalExpense = 0;
   const dailyData = [];
   const expenseList = [];
   
-  deliveries.forEach(d => {
-    const hours = getDeliveryHours(d);
-    totalCappedHours += hours.capped;
-    totalActualHours += hours.actual;
+  // 人件費計算（補填ロジック含む）
+  const laborResult = calculateLaborCost(deliveries, hourly);
+  const totalCappedHours = laborResult.totalCappedHours;
+  const totalActualHours = laborResult.totalActualHours;
+  const laborCost = laborResult.laborCost;
+  
+  laborResult.dailyData.forEach(ld => {
+    const d = ld.delivery;
     const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
     if (km > 0) totalKm += km;
     let dayExpense = 0;
@@ -4052,10 +4178,19 @@ function printInvoice() {
       });
     } catch(e) {}
     totalExpense += dayExpense;
-    dailyData.push({date:d.date, startTime:d.startTime||'-', endTime:d.endTime||'-', actualHours:hours.actual, cappedHours:hours.capped, km, expense:dayExpense});
+    dailyData.push({
+      date: ld.date,
+      startTime: ld.startTime,
+      endTime: ld.endTime,
+      actualHours: ld.actualHours,
+      cappedHours: ld.finalHours,
+      category: ld.category,
+      note: ld.note,
+      pairedWith: ld.pairedWith,
+      km, expense: dayExpense
+    });
   });
   
-  const laborCost = Math.round(hourly * totalCappedHours);
   const fuelLiters = fuel > 0 ? totalKm / fuel : 0;
   const fuelCost = Math.round(fuelLiters * fuelPrice);
   const totalAmount = laborCost + fuelCost + totalExpense;
@@ -4122,16 +4257,23 @@ function printInvoice() {
   </div>
   
   <h2>📅 日別明細</h2>
+  <p style="font-size:10px;color:#94a3b8;margin-bottom:8px;">※ 計算ルール: 3h未満=無効 / 3〜5h=補填候補（日付順ペア合算→8hキャップ） / 5h超〜8h=確定 / 8h超=8hキャップ / 50〜70分=1時間で丸め</p>
   <table>
-    <thead><tr><th>日付</th><th class="center">開始</th><th class="center">終了</th><th class="center">実労</th><th class="center">請求対象</th><th class="center">走行</th><th class="right">人件費</th></tr></thead>
+    <thead><tr><th>日付</th><th class="center">開始</th><th class="center">終了</th><th class="center">実労</th><th class="center">分類</th><th class="center">請求対象</th><th class="center">走行</th><th class="right">人件費</th></tr></thead>
     <tbody>
       ${dailyData.map(d => {
-        const overtime = d.actualHours > d.cappedHours;
+        const catLabel = {
+          invalid: '<span style="color:#b91c1c;">❌ 無効</span>',
+          hojuu: '<span style="color:#92400e;">🔄 補填</span>',
+          normal: '<span style="color:#166534;">✓ 確定</span>',
+          capped: '<span style="color:#b91c1c;">⚠️ 残業カット</span>',
+        }[d.category] || '';
         return `<tr>
           <td>${d.date}</td>
           <td class="center">${d.startTime}</td>
           <td class="center">${d.endTime}</td>
-          <td class="center ${overtime?'overtime':''}">${fmtH(d.actualHours)}h${overtime?' ⚠️':''}</td>
+          <td class="center">${fmtH(d.actualHours)}h</td>
+          <td class="center" style="font-size:10px;">${catLabel}${d.note?`<br><span style="color:#94a3b8;font-size:9px;">${d.note}</span>`:''}</td>
           <td class="center"><strong>${fmtH(d.cappedHours)}h</strong></td>
           <td class="center">${d.km>0?d.km+'km':'-'}</td>
           <td class="right"><strong>¥${fmt(Math.round(hourly*d.cappedHours))}</strong></td>
