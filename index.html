@@ -1407,6 +1407,38 @@ function calcPriorityScore(f) {
   return Math.round(vcScore + daysScore);
 }
 
+// ====== 隣接エリア定義 ======
+// 沖縄本島の地理に基づく隣接関係
+const ADJACENT_ZONES = {
+  '1': ['2', '3'],       // 那覇市 → 南部、中部
+  '2': ['1'],            // 南部 → 那覇市
+  '3': ['1', '4'],       // 中部 → 那覇市、北部・恩納
+  '4': ['3', '5'],       // 北部・恩納 → 中部、名護・本部
+  '5': ['4'],            // 名護・本部 → 北部・恩納
+};
+
+// ====== 経過日数の分類 ======
+// 担当者画面で施設を経過日数別にグルーピングするための分類
+// 'unvisited': 未訪問
+// 'over21': 21日以上経過
+// 'd18to20': 18〜20日経過
+// 'd14to17': 14〜17日経過
+// 'd0to13':  0〜13日経過（最近）
+// 'done':    本日配布完了
+// 'excluded': 配布対象外
+function classifyFacility(f) {
+  if (isExcludedFacility(f)) return 'excluded';
+  if (f.status === 'done') return 'done';
+  const vc = f.visitCount || 0;
+  if (vc === 0) return 'unvisited';
+  const days = getDaysSinceLastVisit(f);
+  if (days == null) return 'unvisited';  // 念のため
+  if (days >= 21) return 'over21';
+  if (days >= 18) return 'd18to20';
+  if (days >= 14) return 'd14to17';
+  return 'd0to13';
+}
+
 async function reloadFacilities() {
   const {data} = await sb.from('facilities').select('*').order('id');
   if (data) {
@@ -2773,98 +2805,15 @@ async function respondSchedule(id, response) {
 // ============================================================
 // DELIVERY
 // ============================================================
-function renderDelivery() {
-  const uid = state.currentUser.id;
-  const staff = state.staff.find(s=>s.id===uid);
-  const todaySched = state.schedules.find(s=>s.staffId===uid && s.date===state.today);
-  const activeZone = todaySched?.zoneId || staff?.zone;
-  // 管理者が指定した業種フィルター
-  const schedGenres = (() => { try { return JSON.parse(todaySched?.genreFilter||'["all"]'); } catch(e){ return ['all']; } })();
-  // 担当者が選択中の業種フィルター（state管理）
-  if (!state.deliveryGenreFilter) state.deliveryGenreFilter = schedGenres;
-  const activeGenres = state.deliveryGenreFilter;
-  const allZoneFacs = state.facilities.filter(f => {
-    if (f.zone !== activeZone) return false;
-    if (activeGenres.includes('all')) return true;
-    return activeGenres.includes(f.genre);
-  });
-  // ソート
-  const delivSort = state.deliverySort || 'visit_asc';
-  const sortFacs = (facs) => {
-    if (delivSort === 'visit_asc') return sortByPriority(facs, 'asc');
-    if (delivSort === 'visit_desc') return sortByPriority(facs, 'desc');
-    return facs;
-  };
-  // 配布対象外の施設を最下層に固定するソート
-  // 1. 配布対象外じゃない施設（既存ソート） → 上
-  // 2. 配布対象外の施設 → 最下層
-  const sortWithExcluded = (facs) => {
-    const normal = facs.filter(f => !isExcludedFacility(f));
-    const excluded = facs.filter(f => isExcludedFacility(f));
-    return [...sortFacs(normal), ...excluded];
-  };
-  const zoneFacs = sortFacs(allZoneFacs.filter(f => f.status!=='done' && f.status!=='skip' && !isExcludedFacility(f)));
-  const todayDelivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
-  const todayReports = todayDelivery?.reports || [];
-  const completedCount = allZoneFacs.filter(f=>f.status==='done').length;
-
-  let html = '';
-  // 業種フィルターUI
-  const genreFilterUI = () => {
-    const genres = [
-      {id:'all', label:'すべて', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="2" fill="currentColor"/><rect x="3" y="13" width="8" height="8" rx="2" fill="currentColor"/><rect x="13" y="13" width="8" height="8" rx="2" fill="currentColor"/></svg>`},
-      {id:'hotel', label:'ホテル', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="14" rx="2" fill="currentColor"/><rect x="7" y="3" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.6"/><rect x="14" y="3" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.6"/></svg>`},
-      {id:'rental', label:'レンタカー', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="1" y="9" width="22" height="11" rx="3" fill="currentColor"/><path d="M5 9l2-5h10l2 5" fill="currentColor" opacity="0.5"/><circle cx="7" cy="20" r="2" fill="white"/><circle cx="17" cy="20" r="2" fill="white"/></svg>`},
-      {id:'michi', label:'道の駅・観光', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3C9 3 6 5.5 6 9c0 2.5 1.5 4.5 3.5 5.5L8 18h8l-1.5-3.5C16.5 13.5 18 11.5 18 9c0-3.5-3-6-6-6z" fill="#4aa876" opacity="0.8"/><rect x="11" y="18" width="2" height="4" rx="1" fill="#4aa876" opacity="0.6"/></svg>`},
-    ];
-    // 管理者指定の業種のみ表示（allなら全部）
-    const available = schedGenres.includes('all') ? genres : genres.filter(g => g.id==='all' || schedGenres.includes(g.id));
-    return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-      ${available.map(g => {
-        const isActive = activeGenres.includes(g.id) || (g.id==='all' && activeGenres.includes('all'));
-        return `<button onclick="setDeliveryGenreFilter('${g.id}')" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:100px;border:1.5px solid ${isActive?'#033a78':'#dce8f8'};background:${isActive?'#054c9c':'white'};color:${isActive?'white':'#4a5568'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">${g.icon}${g.label}</button>`;
-      }).join('')}
-    </div>`;
-  };
-
-  const sortUI = () => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-    <span style="font-size:12px;color:var(--slate-mid);font-weight:600;">訪問回数でソート：</span>
-    ${[
-      {id:'visit_asc', label:'少ない順 ▲', desc:'未訪問が上'},
-      {id:'visit_desc', label:'多い順 ▽', desc:'多く訪問済みが上'},
-      {id:'default', label:'デフォルト', desc:''},
-    ].map(s => `<button onclick="state.deliverySort='${s.id}';renderDelivery()" style="padding:5px 11px;border-radius:100px;border:1.5px solid ${(state.deliverySort||'visit_asc')===s.id?'#033a78':'#dce8f8'};background:${(state.deliverySort||'visit_asc')===s.id?'#054c9c':'white'};color:${(state.deliverySort||'visit_asc')===s.id?'white':'#4a5568'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">${s.label}</button>`).join('')}
-  </div>`;
-  const genreNames = {hotel:'ホテル',rental:'レンタカー',michi:'道の駅・観光',other:'その他'};
-  const genreLabelDisp = activeGenres.includes('all') ? 'すべて' : activeGenres.map(g=>genreNames[g]||g).join('・');
-  if (!todayDelivery?.started) {
-    html += `<div class="alert alert-info">本日の担当エリア: <strong>${AREA_NAMES[activeZone]||'未設定'}</strong> ／ 対象業種: <strong>${genreLabelDisp}</strong> ／ 巡回施設: <strong>${zoneFacs.length}件</strong></div>
-    ${genreFilterUI()}
-    ${sortUI()}
-    <div style="display:flex;gap:12px;margin-bottom:20px;">
-      <button class="btn btn-forest btn-lg" onclick="document.getElementById('startTime').value=new Date().toTimeString().slice(0,5);openModal('startDeliveryModal')"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="1" y="9" width="22" height="11" rx="3" fill="currentColor"/><path d="M5 9l2-5h10l2 5" fill="currentColor" opacity="0.6"/><circle cx="7" cy="20" r="2.5" fill="white"/><circle cx="17" cy="20" r="2.5" fill="white"/></svg>配達を開始する</span></button>
-    </div>`;
-  } else if (!todayDelivery?.ended) {
-    html += `<div class="alert alert-success" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:3px;"><rect x="1" y="9" width="22" height="11" rx="3" fill="#054c9c"/><path d="M5 9l2-5h10l2 5" fill="#054c9c" opacity="0.5"/><circle cx="7" cy="20" r="2" fill="white"/><circle cx="17" cy="20" r="2" fill="white"/></svg> 配達中 | 完了: <strong>${completedCount}</strong>/${allZoneFacs.length}件
-      <button class="btn btn-coral btn-sm" style="margin-left:auto;" onclick="document.getElementById('endTime').value=new Date().toTimeString().slice(0,5);openModal('endDeliveryModal')"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="3" height="18" rx="1" fill="currentColor"/><path d="M5 4h14l-3 5 3 5H5" fill="currentColor" opacity="0.6"/></svg>配達終了</span></button>
-    </div>
-    ${genreFilterUI()}
-    ${sortUI()}`;
-  } else {
-    html += `<div class="alert alert-success"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/><path d="M7 12l3.5 3.5L17 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>本日の配達完了！お疲れ様でした。</span></div>
-    ${genreFilterUI()}
-    ${sortUI()}`;
-  }
-  html += `<div class="facilityList">${sortWithExcluded(allZoneFacs).map(f => {
-    const rep = todayReports.find(r=>r.facId===f.id);
-    const isDone = f.status==='done';
-    const isSkip = f.status==='skip';
-    const isExcluded = isDone || isSkip;
-    // 配布対象外（名前パターン）の判定
-    const isOffTarget = isExcludedFacility(f);
-    // 配布対象外の施設は強くグレーアウト＋ボタン無効化
-    const cardOpacity = isOffTarget ? 'opacity:0.45;background:#f1f5f9;' : (isExcluded ? 'opacity:0.6;' : '');
-    return `<div class="facilityCard ${rep ? (rep.status==='done'?'done':rep.status==='skip'?'skip':'pending') : ''}" style="${cardOpacity}">
+// ===== 施設カード生成（renderDeliveryで使用） =====
+function buildFacilityCard(f, todayReports) {
+  const rep = todayReports.find(r=>r.facId===f.id);
+  const isDone = f.status==='done';
+  const isSkip = f.status==='skip';
+  const isExcluded = isDone || isSkip;
+  const isOffTarget = isExcludedFacility(f);
+  const cardOpacity = isOffTarget ? 'opacity:0.45;background:#f1f5f9;' : (isExcluded ? 'opacity:0.6;' : '');
+  return `<div class="facilityCard ${rep ? (rep.status==='done'?'done':rep.status==='skip'?'skip':'pending') : ''}" style="${cardOpacity}">
       <div class="fcTop">
         <div style="flex:1;">
           <div class="fcName" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -2881,7 +2830,7 @@ function renderDelivery() {
             <span class="fcTag" style="display:inline-flex;align-items:center;gap:3px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><rect x="3" y="8" width="18" height="10" rx="2" fill="#94a3b8"/><rect x="7" y="5" width="3" height="5" rx="1" fill="#94a3b8" opacity="0.6"/><rect x="14" y="5" width="3" height="5" rx="1" fill="#94a3b8" opacity="0.6"/></svg>${f.rack}</span>
           </div>
           ${f.address?`<div class="fcTag" style="margin-top:4px;font-size:11px;display:flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" fill="#94a3b8" opacity="0.7"/><path d="M22 6l-10 7L2 6" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>${f.address}</div>`:''}
-          ${(()=>{const m=getLatestNoteForFac(f.id);if(!m)return '';const bid='dnote-'+f.id;return `<div style="margin-top:6px;"><button onclick="(function(){const el=document.getElementById('${bid}');if(el)el.style.display=el.style.display==='none'?'block':'none';})()" style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;background:#fef9c3;border:1px solid #fde047;font-size:11px;font-weight:600;color:#854d0e;cursor:pointer;">💬 現地注意点☝️</button><div id="${bid}" style="display:none;margin-top:6px;padding:9px 12px;background:#fffbeb;border:1px solid #fde047;border-radius:8px;font-size:12px;color:#78350f;line-height:1.6;">${m.note}<div style="margin-top:4px;font-size:10px;color:#a16207;">${m.date} · ${state.staff.find(s=>s.id===m.staffId)?.name||'担当者'}</div></div></div>`;})()}
+          ${(()=>{const m=getLatestNoteForFac(f.id);if(!m)return '';const bid='dnote-'+f.id+'-'+Math.random().toString(36).slice(2,8);return `<div style="margin-top:6px;"><button onclick="(function(){const el=document.getElementById('${bid}');if(el)el.style.display=el.style.display==='none'?'block':'none';})()" style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;background:#fef9c3;border:1px solid #fde047;font-size:11px;font-weight:600;color:#854d0e;cursor:pointer;">💬 現地注意点☝️</button><div id="${bid}" style="display:none;margin-top:6px;padding:9px 12px;background:#fffbeb;border:1px solid #fde047;border-radius:8px;font-size:12px;color:#78350f;line-height:1.6;">${m.note}<div style="margin-top:4px;font-size:10px;color:#a16207;">${m.date} · ${state.staff.find(s=>s.id===m.staffId)?.name||'担当者'}</div></div></div>`;})()}
         </div>
         ${rep ? `<div class="completeCheckAnim">${rep.status==='done'?'✓':rep.status==='skip'?'→':'✗'}</div>` : ''}
       </div>
@@ -2893,7 +2842,231 @@ function renderDelivery() {
         <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((f.address||f.name)+' 沖縄')}" target="_blank" class="btn btn-outline btn-sm"><span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>MAP</span></a>
       </div>` : `<div style="margin-top:8px;font-size:11px;color:var(--slate-mid);">${isDone ? '✅ 配布完了済みのため訪問不要' : '⏭ 補充不要のため14日間スキップ'}</div>`}
     </div>`;
-  }).join('')}</div>`;
+}
+
+// ===== グループ別の施設リスト生成 =====
+// facs: 対象の施設配列（全部）
+// isAdjacent: 隣接エリアタブかどうか（true: 折りたたみあり）
+// hasOver21InAdjacent: 隣接エリアに21日以上の施設があるか（線引きメッセージの表示判定）
+function buildFacilityGroups(facs, todayReports, isAdjacent, hasOver21InAdjacent) {
+  // 経過日数別に分類
+  const groups = {
+    unvisited: [],
+    over21: [],
+    d18to20: [],
+    d14to17: [],
+    d0to13: [],
+    done: [],
+    excluded: [],
+  };
+  facs.forEach(f => {
+    const cls = classifyFacility(f);
+    groups[cls].push(f);
+  });
+  // 各グループ内では古い順（経過日数の長い順）にソート
+  const sortByDays = (arr) => arr.slice().sort((a, b) => {
+    const da = getDaysSinceLastVisit(a);
+    const db = getDaysSinceLastVisit(b);
+    return (db == null ? -1 : db) - (da == null ? -1 : da);
+  });
+  groups.over21 = sortByDays(groups.over21);
+  groups.d18to20 = sortByDays(groups.d18to20);
+  groups.d14to17 = sortByDays(groups.d14to17);
+  groups.d0to13 = sortByDays(groups.d0to13);
+
+  const renderGroup = (title, items, color) => {
+    if (items.length === 0) return '';
+    return `<div style="margin-top:14px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:13px;font-weight:800;color:${color};">${title}</span>
+      <span style="font-size:11px;color:#94a3b8;">${items.length}件</span>
+      <div style="flex:1;height:1px;background:${color};opacity:0.3;"></div>
+    </div>${items.map(f => buildFacilityCard(f, todayReports)).join('')}`;
+  };
+
+  const lineMessage = `<div style="background:linear-gradient(135deg,#fef3c7,#fef9c3);border:2px dashed #f0b700;border-radius:12px;padding:14px 16px;margin:14px 0;">
+    <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:6px;">💡 以下の施設は配布したばかり☝️</div>
+    <div style="font-size:12px;color:#78350f;line-height:1.7;">
+      まだ補充しなくて良い可能性高いです<br>
+      隣接エリアの配布から<strong>21日以上経過した施設</strong>への配布をお勧めします<br>
+      <span style="font-size:11px;color:#a16207;">※ 現在地から30分以上かかる場合は、指示エリアでの配布を続行しましょう❣️<br>　　各施設の【MAP】ボタンで確認してみてください✨</span>
+    </div>
+  </div>`;
+
+  let html = '';
+  
+  if (isAdjacent) {
+    // === 隣接エリアタブ ===
+    // 未訪問と21日以上だけメイン表示、その他は折りたたみ
+    html += renderGroup('🔴 未訪問', groups.unvisited, '#b91c1c');
+    html += renderGroup('🔥 21日以上経過', groups.over21, '#b91c1c');
+    
+    const otherTotal = groups.d18to20.length + groups.d14to17.length + groups.d0to13.length + groups.done.length + groups.excluded.length;
+    if (otherTotal > 0) {
+      const expanded = state.adjExpanded || false;
+      html += `<div style="margin-top:14px;text-align:center;">
+        <button class="btn btn-outline btn-sm" onclick="state.adjExpanded=!state.adjExpanded;renderDelivery()">
+          ${expanded ? '▲ 折りたたむ' : `▼ それ以外も見る（${otherTotal}件）`}
+        </button>
+      </div>`;
+      if (expanded) {
+        html += renderGroup('⏰ 18〜20日経過', groups.d18to20, '#c2410c');
+        html += renderGroup('🟡 14〜17日経過', groups.d14to17, '#92400e');
+        html += renderGroup('✅ 13日以内', groups.d0to13, '#166534');
+        html += renderGroup('✓ 配達済', groups.done, '#4aa876');
+        html += renderGroup('⚫ 配布対象外', groups.excluded, '#94a3b8');
+      }
+    }
+  } else {
+    // === 指示エリアタブ ===
+    html += renderGroup('🔴 未訪問', groups.unvisited, '#b91c1c');
+    html += renderGroup('🔥 21日以上経過', groups.over21, '#b91c1c');
+    html += renderGroup('⏰ 18〜20日経過', groups.d18to20, '#c2410c');
+    
+    // 線引きメッセージ: 隣接エリアに21日以上の施設があり、かつ14〜17日の施設が1件以上ある時に表示
+    if (hasOver21InAdjacent && groups.d14to17.length > 0) {
+      html += lineMessage;
+    }
+    
+    html += renderGroup('🟡 14〜17日経過', groups.d14to17, '#92400e');
+    html += renderGroup('✅ 13日以内', groups.d0to13, '#166534');
+    html += renderGroup('✓ 配達済', groups.done, '#4aa876');
+    html += renderGroup('⚫ 配布対象外', groups.excluded, '#94a3b8');
+  }
+  
+  if (facs.length === 0) {
+    html = '<div style="text-align:center;color:#94a3b8;padding:20px;font-size:13px;">該当する施設はありません</div>';
+  }
+  
+  return html;
+}
+
+function renderDelivery() {
+  const uid = state.currentUser.id;
+  const staff = state.staff.find(s=>s.id===uid);
+  const todaySched = state.schedules.find(s=>s.staffId===uid && s.date===state.today);
+  const activeZone = todaySched?.zoneId || staff?.zone;
+  
+  // 管理者が指定した業種フィルター
+  const schedGenres = (() => { try { return JSON.parse(todaySched?.genreFilter||'["all"]'); } catch(e){ return ['all']; } })();
+  // 担当者が選択中の業種フィルター（state管理）
+  if (!state.deliveryGenreFilter) state.deliveryGenreFilter = schedGenres;
+  const activeGenres = state.deliveryGenreFilter;
+  
+  // 業種フィルター関数
+  const filterByGenre = (f) => {
+    if (activeGenres.includes('all')) return true;
+    return activeGenres.includes(f.genre);
+  };
+  
+  // ====== 表示対象エリアの設定 ======
+  // 指示エリアが変わった場合は activeDeliveryZone をリセット
+  if (state.lastActiveZone !== activeZone) {
+    state.activeDeliveryZone = activeZone;
+    state.adjExpanded = false;
+    state.lastActiveZone = activeZone;
+  }
+  // 現在表示中のタブ（指示エリア or 隣接エリア）
+  if (!state.activeDeliveryZone) state.activeDeliveryZone = activeZone;
+  const currentZone = state.activeDeliveryZone;
+  const isAdjacentTab = currentZone !== activeZone;
+  
+  // 隣接エリア取得
+  const adjacentZones = activeZone ? (ADJACENT_ZONES[String(activeZone)] || []) : [];
+  
+  // 現在のタブで表示する施設
+  const currentZoneFacs = state.facilities.filter(f => 
+    String(f.zone) === String(currentZone) && filterByGenre(f)
+  );
+  
+  // 隣接エリア全体に「21日以上経過」の施設があるか判定（線引きメッセージ用）
+  const hasOver21InAdjacent = adjacentZones.some(adjZ => 
+    state.facilities.some(f => 
+      String(f.zone) === adjZ && 
+      filterByGenre(f) && 
+      classifyFacility(f) === 'over21'
+    )
+  );
+  
+  const todayDelivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
+  const todayReports = todayDelivery?.reports || [];
+  
+  // 統計用（指示エリア全体での件数）
+  const allActiveZoneFacs = state.facilities.filter(f => 
+    String(f.zone) === String(activeZone) && filterByGenre(f)
+  );
+  const completedCount = allActiveZoneFacs.filter(f=>f.status==='done').length;
+  const remainingCount = allActiveZoneFacs.filter(f => 
+    !isExcludedFacility(f) && f.status !== 'done' && f.status !== 'skip'
+  ).length;
+
+  let html = '';
+  
+  // 業種フィルターUI
+  const genreFilterUI = () => {
+    const genres = [
+      {id:'all', label:'すべて', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="2" fill="currentColor"/><rect x="3" y="13" width="8" height="8" rx="2" fill="currentColor"/><rect x="13" y="13" width="8" height="8" rx="2" fill="currentColor"/></svg>`},
+      {id:'hotel', label:'ホテル', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="14" rx="2" fill="currentColor"/><rect x="7" y="3" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.6"/><rect x="14" y="3" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.6"/></svg>`},
+      {id:'rental', label:'レンタカー', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="1" y="9" width="22" height="11" rx="3" fill="currentColor"/><path d="M5 9l2-5h10l2 5" fill="currentColor" opacity="0.5"/><circle cx="7" cy="20" r="2" fill="white"/><circle cx="17" cy="20" r="2" fill="white"/></svg>`},
+      {id:'michi', label:'道の駅・観光', icon:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3C9 3 6 5.5 6 9c0 2.5 1.5 4.5 3.5 5.5L8 18h8l-1.5-3.5C16.5 13.5 18 11.5 18 9c0-3.5-3-6-6-6z" fill="#4aa876" opacity="0.8"/><rect x="11" y="18" width="2" height="4" rx="1" fill="#4aa876" opacity="0.6"/></svg>`},
+    ];
+    const available = schedGenres.includes('all') ? genres : genres.filter(g => g.id==='all' || schedGenres.includes(g.id));
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      ${available.map(g => {
+        const isActive = activeGenres.includes(g.id) || (g.id==='all' && activeGenres.includes('all'));
+        return `<button onclick="setDeliveryGenreFilter('${g.id}')" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:100px;border:1.5px solid ${isActive?'#033a78':'#dce8f8'};background:${isActive?'#054c9c':'white'};color:${isActive?'white':'#4a5568'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">${g.icon}${g.label}</button>`;
+      }).join('')}
+    </div>`;
+  };
+  
+  // ====== エリアタブUI ======
+  const zoneTabsUI = () => {
+    const tabs = [];
+    // 指示エリアタブ
+    if (activeZone) {
+      tabs.push({zone: activeZone, label: `指示: ${AREA_NAMES[activeZone]||activeZone}`, isMain: true});
+    }
+    // 隣接エリアタブ
+    adjacentZones.forEach(z => {
+      tabs.push({zone: z, label: `隣接: ${AREA_NAMES[z]||z}`, isMain: false});
+    });
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;border-bottom:2px solid #e2e8f0;padding-bottom:10px;">
+      ${tabs.map(t => {
+        const isActive = String(state.activeDeliveryZone) === String(t.zone);
+        const bg = isActive ? '#054c9c' : 'white';
+        const col = isActive ? 'white' : '#4a5568';
+        const border = isActive ? '#033a78' : '#dce8f8';
+        return `<button onclick="state.activeDeliveryZone='${t.zone}';state.adjExpanded=false;renderDelivery()" style="padding:8px 14px;border-radius:100px 100px 0 0;border:1.5px solid ${border};border-bottom:none;background:${bg};color:${col};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">${t.label}</button>`;
+      }).join('')}
+    </div>`;
+  };
+  
+  const genreNames = {hotel:'ホテル',rental:'レンタカー',michi:'道の駅・観光',other:'その他'};
+  const genreLabelDisp = activeGenres.includes('all') ? 'すべて' : activeGenres.map(g=>genreNames[g]||g).join('・');
+  
+  if (!todayDelivery?.started) {
+    html += `<div class="alert alert-info">本日の担当エリア: <strong>${AREA_NAMES[activeZone]||'未設定'}</strong> ／ 対象業種: <strong>${genreLabelDisp}</strong> ／ 残り: <strong>${remainingCount}件</strong></div>
+    ${genreFilterUI()}
+    <div style="display:flex;gap:12px;margin-bottom:20px;">
+      <button class="btn btn-forest btn-lg" onclick="document.getElementById('startTime').value=new Date().toTimeString().slice(0,5);openModal('startDeliveryModal')"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="1" y="9" width="22" height="11" rx="3" fill="currentColor"/><path d="M5 9l2-5h10l2 5" fill="currentColor" opacity="0.6"/><circle cx="7" cy="20" r="2.5" fill="white"/><circle cx="17" cy="20" r="2.5" fill="white"/></svg>配達を開始する</span></button>
+    </div>`;
+  } else if (!todayDelivery?.ended) {
+    html += `<div class="alert alert-success" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:3px;"><rect x="1" y="9" width="22" height="11" rx="3" fill="#054c9c"/><path d="M5 9l2-5h10l2 5" fill="#054c9c" opacity="0.5"/><circle cx="7" cy="20" r="2" fill="white"/><circle cx="17" cy="20" r="2" fill="white"/></svg> 配達中 | 完了: <strong>${completedCount}</strong>/${allActiveZoneFacs.length}件
+      <button class="btn btn-coral btn-sm" style="margin-left:auto;" onclick="document.getElementById('endTime').value=new Date().toTimeString().slice(0,5);openModal('endDeliveryModal')"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="3" height="18" rx="1" fill="currentColor"/><path d="M5 4h14l-3 5 3 5H5" fill="currentColor" opacity="0.6"/></svg>配達終了</span></button>
+    </div>
+    ${genreFilterUI()}`;
+  } else {
+    html += `<div class="alert alert-success"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/><path d="M7 12l3.5 3.5L17 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>本日の配達完了！お疲れ様でした。</span></div>
+    ${genreFilterUI()}`;
+  }
+  
+  // エリアタブ表示（隣接エリアがある場合のみ）
+  if (adjacentZones.length > 0) {
+    html += zoneTabsUI();
+  }
+  
+  // 施設リスト（グルーピング表示）
+  html += `<div class="facilityList">${buildFacilityGroups(currentZoneFacs, todayReports, isAdjacentTab, hasOver21InAdjacent)}</div>`;
+  
   document.getElementById('deliveryContent').innerHTML = html;
 }
 
