@@ -319,6 +319,7 @@ input[type=file] { display:none; }
     <div class="page active" id="page-dashboard">
       <div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="#054c9c"/><rect x="13" y="3" width="8" height="8" rx="2" fill="#054c9c"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#054c9c"/><rect x="13" y="13" width="8" height="8" rx="2" fill="#054c9c"/></svg>ダッシュボード</span></div>
       <div id="pamphAlertBanner"></div>
+      <div id="zonePriorityPanel"></div>
       <div id="priorityFacilitiesPanel"></div>
       <div class="statsGrid" id="dashStats"></div>
       <div class="twoCol">
@@ -1744,6 +1745,81 @@ async function resolvePamphAlert(alertId) {
   renderDashboard();
 }
 
+// ===== エリア別「行くべき度」サマリー (管理者ダッシュボード) =====
+function renderZonePrioritySummary() {
+  const panel = document.getElementById('zonePriorityPanel');
+  if (!panel) return;
+  
+  // 配布対象外を除外した施設で集計
+  const targetFacs = state.facilities.filter(f => !isExcludedFacility(f));
+  
+  // エリアごとに集計
+  const zones = ['1', '2', '3', '4', '5'];
+  const zoneStats = zones.map(z => {
+    const facs = targetFacs.filter(f => String(f.zone) === z);
+    const unvisited = facs.filter(f => (f.visitCount || 0) === 0).length;
+    const onceOnly = facs.filter(f => (f.visitCount || 0) === 1).length;
+    const over21Days = facs.filter(f => {
+      const days = getDaysSinceLastVisit(f);
+      return days != null && days >= 21;
+    }).length;
+    
+    // 行くべき度スコア: 未訪問×5 + 1回のみ×2 + 21日以上×3
+    const score = unvisited * 5 + onceOnly * 2 + over21Days * 3;
+    
+    // 優先度判定
+    let priority, priColor, priIcon, priBg;
+    if (score >= 30) { priority = '高'; priColor = '#b91c1c'; priIcon = '🔥'; priBg = '#fee2e2'; }
+    else if (score >= 15) { priority = '中'; priColor = '#c2410c'; priIcon = '⏰'; priBg = '#fed7aa'; }
+    else { priority = '低'; priColor = '#166534'; priIcon = '✅'; priBg = '#dcfce7'; }
+    
+    return {
+      zone: z,
+      name: AREA_NAMES[z] || 'エリア'+z,
+      total: facs.length,
+      unvisited, onceOnly, over21Days,
+      score, priority, priColor, priIcon, priBg
+    };
+  });
+  
+  // スコア順にソート
+  zoneStats.sort((a, b) => b.score - a.score);
+  
+  const cards = zoneStats.map(zs => {
+    return `<div style="background:white;border:2px solid ${zs.priColor};border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:800;color:#1a2340;flex:1;min-width:0;">${zs.name}</span>
+        <span style="background:${zs.priBg};color:${zs.priColor};font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;white-space:nowrap;">${zs.priIcon} 優先度 ${zs.priority}</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${zs.unvisited > 0 ? `<span style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;">🔴 未訪問 ${zs.unvisited}件</span>` : ''}
+        ${zs.onceOnly > 0 ? `<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;">🔵 1回のみ ${zs.onceOnly}件</span>` : ''}
+        ${zs.over21Days > 0 ? `<span style="background:#fed7aa;color:#c2410c;font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;">⏰ 21日以上経過 ${zs.over21Days}件</span>` : ''}
+        ${zs.unvisited === 0 && zs.onceOnly === 0 && zs.over21Days === 0 ? `<span style="color:#94a3b8;font-size:11px;">該当施設なし</span>` : ''}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#6b7280;border-top:1px solid #f1f5f9;padding-top:5px;">
+        <span>配布対象: 計${zs.total}件</span>
+        <span style="font-weight:800;color:${zs.priColor};">スコア ${zs.score}点</span>
+      </div>
+    </div>`;
+  }).join('');
+  
+  panel.innerHTML = `
+    <div style="background:linear-gradient(135deg,#f0f9ff,#fff7ed);border:2px solid #054c9c;border-radius:14px;padding:14px 16px;margin-bottom:18px;box-shadow:0 3px 14px rgba(5,76,156,0.12);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:22px;">📊</span>
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:800;color:#054c9c;">エリア別「行くべき度」</div>
+          <div style="font-size:11px;color:#475569;margin-top:2px;">未訪問×5点 + 1回のみ×2点 + 21日以上経過×3点 で算出 · 配布対象外は除外済み</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px;">
+        ${cards}
+      </div>
+    </div>
+  `;
+}
+
 // ===== 行くべき施設TOP25 (管理者ダッシュボード) =====
 function renderPriorityFacilities() {
   const panel = document.getElementById('priorityFacilitiesPanel');
@@ -1850,6 +1926,9 @@ function renderDashboard() {
 
   // パンフ不足コールバナー
   renderPamphAlertBanner();
+
+  // エリア別「行くべき度」サマリー
+  renderZonePrioritySummary();
 
   // 行くべき施設TOP25
   renderPriorityFacilities();
