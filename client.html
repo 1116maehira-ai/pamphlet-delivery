@@ -129,7 +129,7 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
     <div class="stat"><div class="stat-val" style="color:var(--navy);" id="statPct">-</div><div class="stat-lbl">完了率</div></div>
     <div class="stat"><div class="stat-val" style="color:#b91c1c;" id="statUnvisited">-</div><div class="stat-lbl">🔴 未訪問施設</div></div>
     <div class="stat" onclick="togglePamphBreakdown('total')" style="cursor:pointer;" title="タップで種別内訳を表示"><div class="stat-val" style="color:#0369a1;" id="statTotalPamph">-</div><div class="stat-lbl">📦 累計配布枚数 ▼</div></div>
-    <div class="stat" onclick="togglePamphBreakdown('month')" style="cursor:pointer;" title="タップで種別内訳を表示"><div class="stat-val" style="color:#7c3aed;" id="statMonthPamph">-</div><div class="stat-lbl">📅 今月の配布 ▼</div></div>
+    <div class="stat" onclick="togglePamphBreakdown('month')" style="cursor:pointer;" title="タップで種別内訳を表示"><div class="stat-val" style="color:#7c3aed;" id="statMonthPamph">-</div><div class="stat-lbl" id="statMonthLabel">📅 今月の配布 ▼</div></div>
   </div>
   
   <!-- 種別内訳パネル（デフォルト非表示） -->
@@ -254,16 +254,22 @@ function updateStats() {
   // 累計配布枚数: 全レポートの枚数合計
   const totalPamph = allReports.reduce((sum, r) => sum + getReportPamphCount(r), 0);
 
-  // 今月の配布枚数: deliveryの日付が今月の reports
-  const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const monthPamph = allReports.reduce((sum, r) => {
-    const dDate = getDeliveryDate(r.delivery_id);
-    if (dDate && dDate.startsWith(ym)) {
+  // 期間内の配布枚数: 期間フィルターと連動
+  const periodPamph = allReports.reduce((sum, r) => {
+    if (isReportInPeriod(r)) {
       return sum + getReportPamphCount(r);
     }
     return sum;
   }, 0);
+
+  // 期間ラベルを動的生成
+  const periodLabels = {
+    'all': '📅 全期間の配布 ▼',
+    'today': '📅 今日の配布 ▼',
+    'week': '📅 今週の配布 ▼',
+    'month': '📅 今月の配布 ▼',
+    'custom': '📅 指定期間の配布 ▼',
+  };
 
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statDone').textContent = done;
@@ -271,7 +277,11 @@ function updateStats() {
   document.getElementById('statPct').textContent = pct + '%';
   document.getElementById('statUnvisited').textContent = unvisited;
   document.getElementById('statTotalPamph').textContent = totalPamph.toLocaleString();
-  document.getElementById('statMonthPamph').textContent = monthPamph.toLocaleString();
+  document.getElementById('statMonthPamph').textContent = periodPamph.toLocaleString();
+  const monthLabelEl = document.getElementById('statMonthLabel');
+  if (monthLabelEl) {
+    monthLabelEl.textContent = periodLabels[currentPeriod] || periodLabels['all'];
+  }
 }
 
 function setTab(tab) {
@@ -299,7 +309,14 @@ function setPeriodFilter(period) {
   if (customInputs) {
     customInputs.style.display = period === 'custom' ? 'inline-flex' : 'none';
   }
+  updateStats();
   renderTable();
+  // 種別内訳パネルが開いていたら更新
+  const panel = document.getElementById('pamphBreakdownPanel');
+  if (panel && panel.style.display === 'block') {
+    togglePamphBreakdown(panel.dataset.scope);
+    togglePamphBreakdown(panel.dataset.scope);  // 2回呼んで再表示
+  }
 }
 
 // 期間フィルターに該当するreportsかどうか判定
@@ -372,12 +389,17 @@ function togglePamphBreakdown(scope) {
       });
     });
   } else if (scope === 'month') {
-    label = '📅 今月の配布 ／ 種別内訳';
-    const now = new Date();
-    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    // 期間フィルターに連動した内訳
+    const periodLabelMap = {
+      'all': '📅 全期間の配布 ／ 種別内訳',
+      'today': '📅 今日の配布 ／ 種別内訳',
+      'week': '📅 今週の配布 ／ 種別内訳',
+      'month': '📅 今月の配布 ／ 種別内訳',
+      'custom': '📅 指定期間の配布 ／ 種別内訳',
+    };
+    label = periodLabelMap[currentPeriod] || periodLabelMap['all'];
     allReports.forEach(r => {
-      const dDate = getDeliveryDate(r.delivery_id);
-      if (!dDate || !dDate.startsWith(ym)) return;
+      if (!isReportInPeriod(r)) return;
       const detail = getReportPamphDetail(r);
       Object.entries(detail).forEach(([k, v]) => {
         const n = parseInt(v) || 0;
