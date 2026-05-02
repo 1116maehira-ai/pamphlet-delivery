@@ -1360,17 +1360,21 @@ function sortByPriority(facs, direction = 'asc') {
 
 // ====== 配布対象外の判定 ======
 // 施設名に以下の表記が含まれていたら「配布対象外」と判定
-// - (配布不要 / (配布不要-重複)
+// - (配布不要 / (配布不要-重複) など
 // - (配送不要
-// - (配布不可 / (配布不可-施設無し) / (配布不可-閉館) / (配布不可-施設重複)
+// - (配布不可 / (配布不可-施設無し) / (配布不可-閉館) / (配布不可-施設重複) / (配布不可-情報重複) など
 // - (閉館
+// ※ 半角スペース・全角スペースが括弧の前後に入っていても検出できるよう、
+//   判定前に施設名のスペースを全て除去して比較する
+//   例: 「( 配布不可-情報重複 )トヨタレンタカー」 → 「(配布不可-情報重複)トヨタレンタカー」 → マッチ
 function isExcludedFacility(f) {
   if (!f || !f.name) return false;
-  const name = f.name;
-  return name.includes('(配布不要') 
-      || name.includes('(配送不要') 
-      || name.includes('(配布不可') 
-      || name.includes('(閉館');
+  // 半角スペース・全角スペースを全て除去
+  const normalized = f.name.replace(/[\s　]/g, '');
+  return normalized.includes('(配布不要') 
+      || normalized.includes('(配送不要') 
+      || normalized.includes('(配布不可') 
+      || normalized.includes('(閉館');
 }
 
 // ====== 行くべき度スコア計算 ======
