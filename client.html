@@ -128,8 +128,17 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
     <div class="stat"><div class="stat-val" style="color:var(--coral);" id="statPending">-</div><div class="stat-lbl">未完了</div></div>
     <div class="stat"><div class="stat-val" style="color:var(--navy);" id="statPct">-</div><div class="stat-lbl">完了率</div></div>
     <div class="stat"><div class="stat-val" style="color:#b91c1c;" id="statUnvisited">-</div><div class="stat-lbl">🔴 未訪問施設</div></div>
-    <div class="stat"><div class="stat-val" style="color:#0369a1;" id="statTotalPamph">-</div><div class="stat-lbl">📦 累計配布枚数</div></div>
-    <div class="stat"><div class="stat-val" style="color:#7c3aed;" id="statMonthPamph">-</div><div class="stat-lbl">📅 今月の配布</div></div>
+    <div class="stat" onclick="togglePamphBreakdown('total')" style="cursor:pointer;" title="タップで種別内訳を表示"><div class="stat-val" style="color:#0369a1;" id="statTotalPamph">-</div><div class="stat-lbl">📦 累計配布枚数 ▼</div></div>
+    <div class="stat" onclick="togglePamphBreakdown('month')" style="cursor:pointer;" title="タップで種別内訳を表示"><div class="stat-val" style="color:#7c3aed;" id="statMonthPamph">-</div><div class="stat-lbl">📅 今月の配布 ▼</div></div>
+  </div>
+  
+  <!-- 種別内訳パネル（デフォルト非表示） -->
+  <div id="pamphBreakdownPanel" style="display:none;background:linear-gradient(135deg,#e0f2fe,#f0f9ff);border-bottom:2px solid #0369a1;padding:16px 24px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span id="breakdownTitle" style="font-size:14px;font-weight:800;color:#0369a1;">📦 種別内訳</span>
+      <button onclick="document.getElementById('pamphBreakdownPanel').style.display='none';" style="margin-left:auto;background:white;border:1px solid #cbd5e1;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;color:#475569;">✕ 閉じる</button>
+    </div>
+    <div id="breakdownContent" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
   </div>
 
   <div class="tabs">
@@ -162,6 +171,18 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
       <option value="today_only">📅 今日の配布のみ</option>
       <option value="default">デフォルト(エリア順)</option>
     </select>
+    <select id="periodFilter" onchange="setPeriodFilter(this.value)">
+      <option value="all">📅 全期間</option>
+      <option value="today">今日</option>
+      <option value="week">今週</option>
+      <option value="month">今月</option>
+      <option value="custom">期間指定...</option>
+    </select>
+    <span id="customPeriodInputs" style="display:none;gap:6px;align-items:center;">
+      <input type="date" id="periodStart" onchange="renderTable()" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
+      <span style="font-size:11px;color:#94a3b8;">〜</span>
+      <input type="date" id="periodEnd" onchange="renderTable()" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
+    </span>
     <span class="badge-count" id="countBadge">-件</span>
   </div>
 
@@ -186,6 +207,7 @@ let allAlerts = [];
 let currentTab = 'hotel';
 let currentZoneFilter = 'all';
 let currentSort = 'visit_asc';
+let currentPeriod = 'all';
 
 // 14日経過チェック: 配布完了から2週間以上経った施設は表示上「未完了」に戻す
 // （DBは書き換えない、index.htmlと同じロジック）
@@ -268,6 +290,124 @@ function setZoneFilter(zone) {
 function setSort(sort) {
   currentSort = sort;
   renderTable();
+}
+
+function setPeriodFilter(period) {
+  currentPeriod = period;
+  // カスタム期間入力欄の表示切り替え
+  const customInputs = document.getElementById('customPeriodInputs');
+  if (customInputs) {
+    customInputs.style.display = period === 'custom' ? 'inline-flex' : 'none';
+  }
+  renderTable();
+}
+
+// 期間フィルターに該当するreportsかどうか判定
+function isReportInPeriod(report) {
+  if (currentPeriod === 'all') return true;
+  const dDate = getDeliveryDate(report.delivery_id);
+  if (!dDate) return false;
+  
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  
+  if (currentPeriod === 'today') return dDate === todayStr;
+  
+  if (currentPeriod === 'week') {
+    const dayOfWeek = today.getDay();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+    return dDate >= mondayStr && dDate <= todayStr;
+  }
+  
+  if (currentPeriod === 'month') {
+    const ym = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+    return dDate.startsWith(ym);
+  }
+  
+  if (currentPeriod === 'custom') {
+    const startEl = document.getElementById('periodStart');
+    const endEl = document.getElementById('periodEnd');
+    const start = startEl?.value;
+    const end = endEl?.value;
+    if (start && dDate < start) return false;
+    if (end && dDate > end) return false;
+    return true;
+  }
+  
+  return true;
+}
+
+// 累計パンフ枚数の種別内訳を表示・非表示
+function togglePamphBreakdown(scope) {
+  const panel = document.getElementById('pamphBreakdownPanel');
+  const titleEl = document.getElementById('breakdownTitle');
+  const contentEl = document.getElementById('breakdownContent');
+  if (!panel || !titleEl || !contentEl) return;
+  
+  // 既に表示中なら閉じる
+  if (panel.style.display === 'block' && panel.dataset.scope === scope) {
+    panel.style.display = 'none';
+    return;
+  }
+  
+  panel.dataset.scope = scope;
+  
+  // 種別ごとの集計
+  const breakdown = {};
+  let total = 0;
+  let label = '';
+  
+  if (scope === 'total') {
+    label = '📦 累計配布枚数 ／ 種別内訳';
+    allReports.forEach(r => {
+      const detail = getReportPamphDetail(r);
+      Object.entries(detail).forEach(([k, v]) => {
+        const n = parseInt(v) || 0;
+        if (n > 0) {
+          breakdown[k] = (breakdown[k] || 0) + n;
+          total += n;
+        }
+      });
+    });
+  } else if (scope === 'month') {
+    label = '📅 今月の配布 ／ 種別内訳';
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    allReports.forEach(r => {
+      const dDate = getDeliveryDate(r.delivery_id);
+      if (!dDate || !dDate.startsWith(ym)) return;
+      const detail = getReportPamphDetail(r);
+      Object.entries(detail).forEach(([k, v]) => {
+        const n = parseInt(v) || 0;
+        if (n > 0) {
+          breakdown[k] = (breakdown[k] || 0) + n;
+          total += n;
+        }
+      });
+    });
+  }
+  
+  titleEl.textContent = label;
+  
+  const keys = Object.keys(breakdown);
+  if (keys.length === 0) {
+    contentEl.innerHTML = '<span style="color:#94a3b8;font-size:13px;">配布記録がありません</span>';
+  } else {
+    contentEl.innerHTML = `
+      <div style="background:white;color:#0369a1;font-size:13px;font-weight:800;padding:8px 16px;border-radius:100px;border:2px solid #0369a1;">
+        合計 ${total.toLocaleString()}枚
+      </div>
+      ${keys.sort((a,b)=>breakdown[b]-breakdown[a]).map(k => `
+        <span style="background:white;color:#1e40af;font-size:13px;font-weight:700;padding:8px 16px;border-radius:100px;border:1px solid #bfdbfe;">
+          【${k}】${breakdown[k].toLocaleString()}枚
+        </span>
+      `).join('')}
+    `;
+  }
+  
+  panel.style.display = 'block';
 }
 
 async function sendPamphAlert(facId, facName) {
@@ -382,6 +522,45 @@ function renderTable() {
     }
   }
   if (currentZoneFilter !== 'all') facs = facs.filter(f => String(f.zone) === currentZoneFilter);
+
+  // 期間フィルター（「最新配布日」が期間に該当する施設のみ表示）
+  if (currentPeriod !== 'all') {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    facs = facs.filter(f => {
+      const r = getLatestReport(f.id);
+      if (!r) return false;
+      const dDate = getDeliveryDate(r.delivery_id);
+      if (!dDate) return false;
+      
+      if (currentPeriod === 'today') return dDate === todayStr;
+      
+      if (currentPeriod === 'week') {
+        const dayOfWeek = today.getDay();
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+        const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+        return dDate >= mondayStr && dDate <= todayStr;
+      }
+      
+      if (currentPeriod === 'month') {
+        const ym = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+        return dDate.startsWith(ym);
+      }
+      
+      if (currentPeriod === 'custom') {
+        const startEl = document.getElementById('periodStart');
+        const endEl = document.getElementById('periodEnd');
+        const start = startEl?.value;
+        const end = endEl?.value;
+        if (start && dDate < start) return false;
+        if (end && dDate > end) return false;
+        return true;
+      }
+      
+      return true;
+    });
+  }
 
   // ソート＆フィルター
   // 各施設の最終配布日を取得するヘルパー
