@@ -4190,6 +4190,16 @@ function renderProfile() {
       
       <div class="formGrid">
         <div class="formGroup">
+          <label class="formLabel">本名（フルネーム） <span style="color:#dc2626;">*</span></label>
+          <input class="formInput" id="pf_real_name" placeholder="山田 太郎" value="${me.real_name||''}">
+          <div style="font-size:10px;color:var(--slate-light);margin-top:3px;">※ 請求書に印字される正式な氏名</div>
+        </div>
+        <div class="formGroup">
+          <label class="formLabel">屋号（任意）</label>
+          <input class="formInput" id="pf_trade_name" placeholder="○○商店、××デザインなど" value="${me.trade_name||''}">
+          <div style="font-size:10px;color:var(--slate-light);margin-top:3px;">※ 屋号があれば請求書に優先表示</div>
+        </div>
+        <div class="formGroup">
           <label class="formLabel">電話番号</label>
           <input class="formInput" id="pf_phone" placeholder="090-1234-5678" value="${me.phone||''}">
         </div>
@@ -4203,8 +4213,8 @@ function renderProfile() {
         </div>
       </div>
       
-      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-top:14px;">
-        💡 請求書には登録名「<strong>${me.name}</strong>」が記載されます。本名でない場合は、管理者に連絡して名前を変更してもらってください。
+      <div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;font-size:12px;color:#1e40af;margin-top:14px;line-height:1.7;">
+        💡 請求書の発行者名は <strong>屋号 → 本名 → アカウント名（${me.name}）</strong> の順で優先表示されます
       </div>
     </div>
     
@@ -4257,6 +4267,8 @@ function renderProfile() {
 async function saveProfile() {
   const myId = state.currentUser.id;
   const data = {
+    real_name: document.getElementById('pf_real_name').value.trim(),
+    trade_name: document.getElementById('pf_trade_name').value.trim(),
     phone: document.getElementById('pf_phone').value.trim(),
     postal_code: document.getElementById('pf_postal_code').value.trim(),
     address: document.getElementById('pf_address').value.trim(),
@@ -4422,7 +4434,8 @@ function printInvoice() {
     
     <div class="from">
       <div class="from-label">発　行　者</div>
-      <div class="from-name">${staff.name}<span class="from-stamp">印</span></div>
+      <div class="from-name">${staff.trade_name || staff.real_name || staff.name}<span class="from-stamp">印</span></div>
+      ${staff.trade_name && staff.real_name ? `<div style="font-size:11px;color:#475569;margin-bottom:4px;">代表 ${staff.real_name}</div>` : ''}
       ${staff.postal_code ? `〒${staff.postal_code}<br>` : ''}
       ${staff.address ? `${staff.address}<br>` : '<span style="color:#dc2626;">※ 住所未登録（プロフィールから設定）</span><br>'}
       ${staff.phone ? `TEL: ${staff.phone}` : '<span style="color:#dc2626;">※ 電話番号未登録</span>'}
