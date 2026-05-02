@@ -433,6 +433,7 @@ input[type=file] { display:none; }
         <div class="formGroup"><label class="formLabel">燃費 (km/L)</label><input class="formInput" id="st_fuel" type="number" placeholder="15.0"></div>
         <div class="formGroup"><label class="formLabel">担当エリア</label><select class="formSelect" id="st_zone"><option value="1">エリア1 (那覇市)</option><option value="2">エリア2 (南部)</option><option value="3">エリア3 (中部)</option><option value="4">エリア4 (北部・恩納)</option><option value="5">エリア5 (名護・本部)</option><option value="">未割り当て</option></select></div>
         <div class="formGroup"><label class="formLabel">アイコン絵文字</label><input class="formInput" id="st_emoji" placeholder="🧑" maxlength="2"></div>
+        <div class="formGroup"><label class="formLabel">💰 時給 (円/時間)</label><input class="formInput" id="st_hourly_wage" type="number" placeholder="1200" min="0"></div>
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('staffModal')">キャンセル</button><button class="btn btn-primary" id="saveStaffBtn" onclick="saveStaff()">保存</button></div>
@@ -2380,6 +2381,7 @@ function renderStaff() {
       <div class="staffName">${s.name}</div>
       <div class="staffMeta" style="display:flex;align-items:center;gap:4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:3px;"><rect x="1" y="9" width="22" height="11" rx="3" fill="#054c9c"/><path d="M5 9l2-5h10l2 5" fill="#054c9c" opacity="0.5"/><circle cx="7" cy="20" r="2" fill="white"/><circle cx="17" cy="20" r="2" fill="white"/></svg>${s.car||'未設定'}</div>
       <div class="staffMeta">⛽ ${s.fuel||0}km/L</div>
+      <div class="staffMeta">💰 ${s.hourly_wage ? '¥'+s.hourly_wage.toLocaleString()+'/時' : '<span style="color:#cbd5e1;">時給未設定</span>'}</div>
       <div style="margin-top:10px;"><span class="badge badge-area${s.zone||'1'}">${AREA_NAMES[s.zone]||'エリア未設定'}</span></div>
       <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;">
         <div class="statusDot ${s.online?'online':'offline'}"></div>
@@ -2389,7 +2391,7 @@ function renderStaff() {
 }
 function openAddStaff() {
   state.selectedStaffEdit = null;
-  ['st_name','st_pin','st_car','st_fuel','st_emoji'].forEach(id => document.getElementById(id).value='');
+  ['st_name','st_pin','st_car','st_fuel','st_emoji','st_hourly_wage'].forEach(id => document.getElementById(id).value='');
   document.getElementById('st_zone').value='1';
   openModal('staffModal');
 }
@@ -2403,9 +2405,11 @@ function editStaff(id) {
   document.getElementById('st_fuel').value=s.fuel||'';
   document.getElementById('st_zone').value=s.zone||'1';
   document.getElementById('st_emoji').value=s.emoji||'';
+  document.getElementById('st_hourly_wage').value = s.hourly_wage || '';
   openModal('staffModal');
 }
 async function saveStaff() {
+  const wageVal = document.getElementById('st_hourly_wage').value;
   const data = {
     name:document.getElementById('st_name').value.trim(),
     pin:document.getElementById('st_pin').value.trim(),
@@ -2413,6 +2417,7 @@ async function saveStaff() {
     fuel:parseFloat(document.getElementById('st_fuel').value)||15,
     zone:document.getElementById('st_zone').value,
     emoji:document.getElementById('st_emoji').value||'👤',
+    hourly_wage: wageVal ? parseInt(wageVal) : null,
   };
   if (!data.name) { alert('氏名を入力してください'); return; }
   if (!data.pin || data.pin.length !== 4) { alert('PINコードは4桁で入力してください'); return; }
