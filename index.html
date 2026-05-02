@@ -319,6 +319,7 @@ input[type=file] { display:none; }
     <div class="page active" id="page-dashboard">
       <div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="#054c9c"/><rect x="13" y="3" width="8" height="8" rx="2" fill="#054c9c"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#054c9c"/><rect x="13" y="13" width="8" height="8" rx="2" fill="#054c9c"/></svg>ダッシュボード</span></div>
       <div id="pamphAlertBanner"></div>
+      <div id="priorityFacilitiesPanel"></div>
       <div class="statsGrid" id="dashStats"></div>
       <div class="twoCol">
         <div class="card"><div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="18" rx="1.5" fill="#054c9c" opacity="0.3"/><rect x="3" y="10" width="7" height="11" rx="1.5" fill="#054c9c"/><rect x="14" y="3" width="7" height="18" rx="1.5" fill="#054c9c" opacity="0.3"/><rect x="14" y="6" width="7" height="15" rx="1.5" fill="#054c9c" opacity="0.7"/></svg>エリア別進捗</span></div><div id="areaProgress"></div></div>
@@ -1356,6 +1357,36 @@ function sortByPriority(facs, direction = 'asc') {
   });
 }
 
+// ====== 配布対象外の判定 ======
+// 施設名に以下の表記が含まれていたら「配布対象外」と判定
+// - (配布不要 / (配布不要-重複)
+// - (配送不要
+// - (配布不可 / (配布不可-施設無し) / (配布不可-閉館) / (配布不可-施設重複)
+// - (閉館
+function isExcludedFacility(f) {
+  if (!f || !f.name) return false;
+  const name = f.name;
+  return name.includes('(配布不要') 
+      || name.includes('(配送不要') 
+      || name.includes('(配布不可') 
+      || name.includes('(閉館');
+}
+
+// ====== 行くべき度スコア計算 ======
+// スコア = (60 ÷ (訪問回数+1)) + (経過日数 ÷ 2)
+// 配布対象外: -1（リストから除外する印）
+// 訪問回数が少ないほど高スコア、経過日数が長いほど高スコア
+function calcPriorityScore(f) {
+  if (isExcludedFacility(f)) return -1;
+  const vc = f.visitCount || 0;
+  const days = getDaysSinceLastVisit(f);
+  // 未訪問は経過日数=未定義だが、訪問回数0なのでスコアは(60/1)+0 = 60点
+  // 1回訪問・60日前: (60/2) + 30 = 60点 → 同等の優先度
+  const vcScore = 60 / (vc + 1);
+  const daysScore = (days || 0) / 2;
+  return Math.round(vcScore + daysScore);
+}
+
 async function reloadFacilities() {
   const {data} = await sb.from('facilities').select('*').order('id');
   if (data) {
@@ -1698,6 +1729,95 @@ async function resolvePamphAlert(alertId) {
   renderDashboard();
 }
 
+// ===== 行くべき施設TOP25 (管理者ダッシュボード) =====
+function renderPriorityFacilities() {
+  const panel = document.getElementById('priorityFacilitiesPanel');
+  if (!panel) return;
+  // スコア計算 → 配布対象外を除外 → 上位25件
+  const ranked = state.facilities
+    .map(f => ({ ...f, _score: calcPriorityScore(f) }))
+    .filter(f => f._score >= 0)
+    .sort((a, b) => b._score - a._score);
+  const top = ranked.slice(0, 25);
+  const excludedCount = state.facilities.length - ranked.length;
+
+  // エリア別集計（参考情報）
+  const byZone = {};
+  top.forEach(f => {
+    const z = f.zone || '?';
+    byZone[z] = (byZone[z] || 0) + 1;
+  });
+  const zoneSummary = Object.entries(byZone)
+    .sort((a, b) => b[1] - a[1])
+    .map(([z, n]) => `<span style="display:inline-block;background:white;border:1px solid #cbd5e1;border-radius:100px;padding:2px 10px;font-size:11px;font-weight:700;color:#054c9c;margin-right:4px;">${AREA_NAMES[z] || 'エリア'+z}: ${n}件</span>`)
+    .join('');
+
+  const items = top.map((f, i) => {
+    const days = getDaysSinceLastVisit(f);
+    const vc = f.visitCount || 0;
+    const rankIcon = i < 3 ? '🥇🥈🥉'[i] : `${i+1}`;
+    const rankBg = i < 3 ? '#fbbf24' : i < 10 ? '#dbeafe' : '#f1f5f9';
+    const rankCol = i < 3 ? 'white' : i < 10 ? '#1e40af' : '#475569';
+    const zoneName = AREA_NAMES[f.zone] || 'エリア'+f.zone;
+    const reasonParts = [];
+    if (vc === 0) reasonParts.push('🔴 未訪問');
+    else reasonParts.push(`🔵 ${vc}回訪問`);
+    if (days != null) {
+      if (days >= 42) reasonParts.push(`🔥 ${days}日経過`);
+      else if (days >= 28) reasonParts.push(`⏰ ${days}日経過`);
+      else if (days >= 14) reasonParts.push(`🟡 ${days}日経過`);
+      else reasonParts.push(`✅ ${days}日経過`);
+    }
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:white;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:5px;">
+      <div style="width:28px;height:28px;border-radius:50%;background:${rankBg};color:${rankCol};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${rankIcon}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:#1a2340;">${f.name}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">${zoneName}${f.area2 ? ' / '+f.area2 : ''} · ${reasonParts.join(' · ')}</div>
+      </div>
+      <div style="font-size:11px;font-weight:800;color:#054c9c;background:#e0f2fe;padding:3px 9px;border-radius:100px;white-space:nowrap;">${f._score}点</div>
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div style="background:linear-gradient(135deg,#e0f2fe,#f0f9ff);border:2px solid #054c9c;border-radius:14px;padding:14px 16px;margin-bottom:18px;box-shadow:0 3px 14px rgba(5,76,156,0.12);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:22px;">🎯</span>
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:800;color:#054c9c;">次に行くべき施設 TOP25</div>
+          <div style="font-size:11px;color:#475569;margin-top:2px;">沖縄全域から、訪問回数の少なさと経過日数を加味して算出${excludedCount > 0 ? ` · 配布対象外 ${excludedCount}件は除外` : ''}</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="state.priorityExpanded=!state.priorityExpanded;renderPriorityFacilities()" style="white-space:nowrap;">${state.priorityExpanded ? '▲ 折りたたむ' : '▼ 全て見る'}</button>
+      </div>
+      <div style="margin-bottom:10px;">${zoneSummary}</div>
+      <div>${state.priorityExpanded ? items : top.slice(0, 5).map((f, i) => {
+        const days = getDaysSinceLastVisit(f);
+        const vc = f.visitCount || 0;
+        const rankIcon = i < 3 ? '🥇🥈🥉'[i] : `${i+1}`;
+        const rankBg = i < 3 ? '#fbbf24' : '#dbeafe';
+        const rankCol = i < 3 ? 'white' : '#1e40af';
+        const zoneName = AREA_NAMES[f.zone] || 'エリア'+f.zone;
+        const reasonParts = [];
+        if (vc === 0) reasonParts.push('🔴 未訪問');
+        else reasonParts.push(`🔵 ${vc}回訪問`);
+        if (days != null) {
+          if (days >= 42) reasonParts.push(`🔥 ${days}日経過`);
+          else if (days >= 28) reasonParts.push(`⏰ ${days}日経過`);
+          else if (days >= 14) reasonParts.push(`🟡 ${days}日経過`);
+          else reasonParts.push(`✅ ${days}日経過`);
+        }
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:white;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:5px;">
+          <div style="width:28px;height:28px;border-radius:50%;background:${rankBg};color:${rankCol};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${rankIcon}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:#1a2340;">${f.name}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">${zoneName}${f.area2 ? ' / '+f.area2 : ''} · ${reasonParts.join(' · ')}</div>
+          </div>
+          <div style="font-size:11px;font-weight:800;color:#054c9c;background:#e0f2fe;padding:3px 9px;border-radius:100px;white-space:nowrap;">${f._score}点</div>
+        </div>`;
+      }).join('') + (top.length > 5 ? `<div style="text-align:center;font-size:11px;color:#6b7280;margin-top:6px;">… 他 ${top.length - 5} 件（▼ 全て見る でTOP25 全表示）</div>` : '')}</div>
+    </div>
+  `;
+}
+
 function renderDashboard() {
   const total = state.facilities.length;
   const done = state.facilities.filter(f=>f.status==='done').length;
@@ -1709,6 +1829,9 @@ function renderDashboard() {
 
   // パンフ不足コールバナー
   renderPamphAlertBanner();
+
+  // 行くべき施設TOP25
+  renderPriorityFacilities();
 
   document.getElementById('dashStats').innerHTML = `
     <div class="statCard ocean"><div class="statLabel">登録施設数</div><div class="statValue">${total}</div><div class="statSub">件</div></div>
