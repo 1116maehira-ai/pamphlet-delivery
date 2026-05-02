@@ -1919,7 +1919,124 @@ function renderPriorityFacilities() {
   `;
 }
 
+// 本日のスケジュール（担当者向けシンプル版）
+// 自分宛のスケジュールだけを表示する
+function renderTodaySchedule() {
+  const myUserId = state.currentUser.id;
+  const todaySched = state.schedules.filter(s => s.date === state.today);
+  const mySchedules = todaySched.filter(s => s.staffId === myUserId);
+  
+  if (mySchedules.length === 0) {
+    document.getElementById('todaySchedule').innerHTML = '<p style="color:var(--slate-light);font-size:13px;">本日のスケジュールはありません</p>';
+    return;
+  }
+  
+  // 優先条件のメッセージ
+  const getPriorityMsg = (p) => {
+    if (!p || p === 'none') return null;
+    const n = parseInt(p);
+    if (isNaN(n)) return null;
+    const colors = ['#fee2e2','#fef9c3','#dbeafe','#dcfce7','#f3f4f6','#f3f4f6'];
+    const borders = ['#fca5a5','#fde047','#93c5fd','#86efac','#d1d5db','#d1d5db'];
+    const icons = ['🔴','🟡','🔵','🟢','⚪','⚪'];
+    const label = n === 0 ? '一度も行っていない施設のみ' : `訪問${n}回以下の施設`;
+    return { msg: `${icons[Math.min(n,5)]} 今日のミッション：${label}を優先して回りましょう！`, bg: colors[Math.min(n,5)], border: borders[Math.min(n,5)] };
+  };
+  
+  let missionHtml = '';
+  mySchedules.forEach(s => {
+    const result = getPriorityMsg(s.priority);
+    if (result) {
+      missionHtml += `<div style="background:${result.bg};border:1.5px solid ${result.border};border-radius:10px;padding:12px 16px;margin-bottom:10px;font-size:13px;font-weight:600;">${result.msg}</div>`;
+    }
+  });
+  
+  // 自分のスケジュール一覧（シンプルカード形式）
+  const cards = mySchedules.map(s => {
+    const zoneName = AREA_NAMES[s.zoneId] || 'エリア'+s.zoneId;
+    const respBadge = s.response==='ok' 
+      ? '<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:700;padding:3px 10px;border-radius:100px;">✓ 対応可</span>'
+      : s.response==='ng' 
+      ? '<span style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:3px 10px;border-radius:100px;">✗ 対応不可</span>'
+      : '<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:3px 10px;border-radius:100px;">— 未回答</span>';
+    return `<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        <span class="badge badge-area${s.zoneId}" style="font-size:12px;">${zoneName}</span>
+        ${respBadge}
+      </div>
+      ${s.note ? `<div style="font-size:12px;color:#475569;margin-top:4px;">📝 ${s.note}</div>` : ''}
+    </div>`;
+  }).join('');
+  
+  document.getElementById('todaySchedule').innerHTML = missionHtml + cards;
+}
+
+
 function renderDashboard() {
+  const isStaffUser = state.currentUser.type === 'staff';
+  
+  // パンフ不足コールバナー（担当者にも全件表示）
+  renderPamphAlertBanner();
+  
+  // ===== 担当者の場合: シンプルなホーム画面 =====
+  if (isStaffUser) {
+    // 不要な要素を非表示にする
+    const hideEls = [
+      'zonePriorityPanel',         // エリア別「行くべき度」
+      'priorityFacilitiesPanel',   // 行くべき施設TOP25
+      'dashStats',                 // 全体統計
+      'adminResetPanel',           // 管理者操作
+    ];
+    hideEls.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+    });
+    // エリア別進捗カードとパンフ種別管理カードも非表示
+    // → これらはCSSセレクタで親カードごと隠す必要があるが、
+    //   areaProgressとパンフ種別フォームの中身を空にして、
+    //   親カードはそのまま残してもよい。ここでは中身だけクリア。
+    const areaProg = document.getElementById('areaProgress');
+    if (areaProg) {
+      // 親カード（.twoCol > .card）ごと非表示にする
+      const parentCard = areaProg.closest('.card');
+      if (parentCard) parentCard.style.display = 'none';
+    }
+    // パンフ種別管理カード（page-dashboard内の最後のカード）を非表示
+    // → page-dashboard 内の "パンフ種別管理" のテキストを含むカードを探して非表示
+    const dashPage = document.getElementById('page-dashboard');
+    if (dashPage) {
+      dashPage.querySelectorAll('.card').forEach(card => {
+        const title = card.querySelector('.cardTitle');
+        if (title && title.textContent.includes('パンフ種別管理')) {
+          card.style.display = 'none';
+        }
+        // GPS地図カードも担当者には不要
+        if (card.id === 'gpsMapCard') {
+          card.style.display = 'none';
+        }
+      });
+    }
+    
+    // 最新通知（自分宛のみ - 既存のフィルタで実現済み）
+    const notifCount = state.notifications.length;
+    const showAll = state.showAllNotif || false;
+    const notifToShow = showAll ? state.notifications : state.notifications.slice(0,5);
+    document.getElementById('notifList').innerHTML = (notifCount === 0 ? '<p style="color:var(--slate-light);font-size:13px;">通知なし</p>' :
+      notifToShow.map(n => {
+        const hasDate = /\d{4}-\d{2}-\d{2}/.test(n.text);
+        const isNavigable = hasDate && (n.text.includes('配達指示') || n.text.includes('出勤'));
+        const tapAttr = isNavigable ? `onclick="handleNotifTap('${n.text.replace(/'/g,"\\'")}');this.style.opacity='0.7';" style="cursor:pointer;"` : '';
+        const arrow = isNavigable ? `<span style="font-size:14px;color:var(--ocean);margin-left:4px;">›</span>` : '';
+        return `<div class="notifItem ${n.unread?'unread':''}" ${tapAttr}><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><span>${n.text}${arrow}</span><span style="font-size:11px;color:var(--slate-light);white-space:nowrap;">${n.time}</span></div></div>`;
+      }).join(''))
+      + (notifCount > 5 ? `<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" onclick="state.showAllNotif=!state.showAllNotif;renderDashboard()">${showAll ? '▲ 折りたたむ' : '▼ 全て見る（'+notifCount+'件）'}</button></div>` : '');
+    
+    // 本日のスケジュール（既存ロジックを呼ぶ）
+    renderTodaySchedule();
+    return;
+  }
+  
+  // ===== 以下は管理者向け =====
   const total = state.facilities.length;
   const done = state.facilities.filter(f=>f.status==='done').length;
   const pending = state.facilities.filter(f=>f.status==='pending').length;
@@ -1928,8 +2045,25 @@ function renderDashboard() {
   const activeStaff = state.staff.filter(s=>s.online).length;
   const pct = total>0 ? Math.round(done/total*100) : 0;
 
-  // パンフ不足コールバナー
-  renderPamphAlertBanner();
+  // 管理者向け要素を再表示（担当者ログイン後の切り替え対策）
+  ['zonePriorityPanel', 'priorityFacilitiesPanel', 'dashStats', 'adminResetPanel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = '';
+  });
+  const areaProgEl = document.getElementById('areaProgress');
+  if (areaProgEl) {
+    const parentCard = areaProgEl.closest('.card');
+    if (parentCard) parentCard.style.display = '';
+  }
+  const dashPage = document.getElementById('page-dashboard');
+  if (dashPage) {
+    dashPage.querySelectorAll('.card').forEach(card => {
+      const title = card.querySelector('.cardTitle');
+      if (title && title.textContent.includes('パンフ種別管理')) {
+        card.style.display = '';
+      }
+    });
+  }
 
   // エリア別「行くべき度」サマリー
   renderZonePrioritySummary();
