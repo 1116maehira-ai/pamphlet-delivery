@@ -2661,7 +2661,15 @@ function renderDelivery() {
     if (delivSort === 'visit_desc') return sortByPriority(facs, 'desc');
     return facs;
   };
-  const zoneFacs = sortFacs(allZoneFacs.filter(f => f.status!=='done' && f.status!=='skip'));
+  // 配布対象外の施設を最下層に固定するソート
+  // 1. 配布対象外じゃない施設（既存ソート） → 上
+  // 2. 配布対象外の施設 → 最下層
+  const sortWithExcluded = (facs) => {
+    const normal = facs.filter(f => !isExcludedFacility(f));
+    const excluded = facs.filter(f => isExcludedFacility(f));
+    return [...sortFacs(normal), ...excluded];
+  };
+  const zoneFacs = sortFacs(allZoneFacs.filter(f => f.status!=='done' && f.status!=='skip' && !isExcludedFacility(f)));
   const todayDelivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
   const todayReports = todayDelivery?.reports || [];
   const completedCount = allZoneFacs.filter(f=>f.status==='done').length;
@@ -2713,15 +2721,20 @@ function renderDelivery() {
     ${genreFilterUI()}
     ${sortUI()}`;
   }
-  html += `<div class="facilityList">${sortFacs(allZoneFacs).map(f => {
+  html += `<div class="facilityList">${sortWithExcluded(allZoneFacs).map(f => {
     const rep = todayReports.find(r=>r.facId===f.id);
     const isDone = f.status==='done';
     const isSkip = f.status==='skip';
     const isExcluded = isDone || isSkip;
-    return `<div class="facilityCard ${rep ? (rep.status==='done'?'done':rep.status==='skip'?'skip':'pending') : ''}" style="${isExcluded?'opacity:0.6;':''}">
+    // 配布対象外（名前パターン）の判定
+    const isOffTarget = isExcludedFacility(f);
+    // 配布対象外の施設は強くグレーアウト＋ボタン無効化
+    const cardOpacity = isOffTarget ? 'opacity:0.45;background:#f1f5f9;' : (isExcluded ? 'opacity:0.6;' : '');
+    return `<div class="facilityCard ${rep ? (rep.status==='done'?'done':rep.status==='skip'?'skip':'pending') : ''}" style="${cardOpacity}">
       <div class="fcTop">
         <div style="flex:1;">
-          <div class="fcName" style="display:flex;align-items:center;gap:8px;">
+          <div class="fcName" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            ${isOffTarget ? '<span style="background:#94a3b8;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">⚫ 配布対象外</span>' : ''}
             ${isDone ? '<span style="background:#4aa876;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">✓ 配達済</span>' : ''}
             ${isSkip ? '<span style="background:#94a3b8;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">⏭ 補充不要</span>' : ''}
             ${(()=>{const vc=f.visitCount||0;const bg=vc===0?'#fee2e2':vc===1?'#fef3c7':vc>=3?'#dcfce7':'#dbeafe';const col=vc===0?'#b91c1c':vc===1?'#92400e':vc>=3?'#166534':'#1e40af';return `<span style="background:${bg};color:${col};font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;">${vc===0?'🔴 未訪問':`🔵 ${vc}回訪問済`}</span>`})()}
@@ -2738,7 +2751,10 @@ function renderDelivery() {
         </div>
         ${rep ? `<div class="completeCheckAnim">${rep.status==='done'?'✓':rep.status==='skip'?'→':'✗'}</div>` : ''}
       </div>
-      ${!isExcluded ? `<div class="fcActions">
+      ${isOffTarget ? `<div class="fcActions" style="pointer-events:none;">
+        <button class="btn btn-primary btn-sm" disabled style="opacity:0.5;cursor:not-allowed;"><span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>報告</span></button>
+        <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;"><span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>MAP</span></button>
+      </div><div style="margin-top:8px;font-size:11px;color:var(--slate-mid);font-weight:600;">⚫ 配布対象外のため訪問・報告は不要です</div>` : !isExcluded ? `<div class="fcActions">
         <button class="btn btn-primary btn-sm" onclick="openCheckIn('${f.id}')"><span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>報告</span></button>
         <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((f.address||f.name)+' 沖縄')}" target="_blank" class="btn btn-outline btn-sm"><span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>MAP</span></a>
       </div>` : `<div style="margin-top:8px;font-size:11px;color:var(--slate-mid);">${isDone ? '✅ 配布完了済みのため訪問不要' : '⏭ 補充不要のため14日間スキップ'}</div>`}
