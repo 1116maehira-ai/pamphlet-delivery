@@ -444,6 +444,37 @@ input[type=file] { display:none; }
   </div>
 </div>
 
+<div class="modal-overlay" id="overrideModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">⚙️ 労働時間の調整</div><button class="modal-close" onclick="closeModal('overrideModal')">✕</button></div>
+    <div class="modal-body">
+      <div id="overrideInfo" style="background:#f1f5f9;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.7;"></div>
+      
+      <div class="formGroup">
+        <label class="formLabel">⏱️ 上書き時間（時間単位）</label>
+        <input class="formInput" id="ovr_hours" type="number" step="0.1" min="0" max="24" placeholder="例: 6.5">
+        <div style="font-size:10px;color:var(--slate-light);margin-top:3px;">空欄で保存すると上書きを解除し、元の打刻時間に戻ります</div>
+      </div>
+      
+      <div class="formGroup">
+        <label class="formLabel">📝 調整理由・メモ</label>
+        <textarea class="formInput" id="ovr_note" rows="3" placeholder="例: 打刻忘れのため本人申告で調整 / 早退のため実際は6.5時間"></textarea>
+      </div>
+      
+      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:10px 12px;font-size:11px;color:#92400e;line-height:1.6;">
+        💡 <strong>補足</strong><br>
+        ・元の打刻データは消えません（記録として残ります）<br>
+        ・上書きした時間が請求書に反映されます<br>
+        ・3h未満は無効、3〜5hは補填候補、5h超〜8hはそのまま、8h超は8hにキャップ
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('overrideModal')">キャンセル</button>
+      <button class="btn btn-primary" id="saveOverrideBtn" onclick="saveOverride()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="checkInModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="checkInTitle">施設報告</div><button class="modal-close" onclick="closeModal('checkInModal')">✕</button></div>
@@ -3719,15 +3750,21 @@ function roundHours(diffMinutes) {
 
 // 日報1件の実労時間を計算（時間単位、小数）
 // 8時間でキャップ
+// override_hours が設定されていればそれを優先
 function getDeliveryHours(d) {
+  // 上書き値があれば優先
+  if (d.override_hours != null && d.override_hours !== '' && !isNaN(parseFloat(d.override_hours))) {
+    const oh = parseFloat(d.override_hours);
+    return { actual: oh, capped: Math.min(oh, 8), isOverride: true };
+  }
   const startMin = timeStrToMinutes(d.startTime);
   const endMin = timeStrToMinutes(d.endTime);
-  if (startMin == null || endMin == null) return { actual: 0, capped: 0 };
+  if (startMin == null || endMin == null) return { actual: 0, capped: 0, isOverride: false };
   let diffMin = endMin - startMin;
   if (diffMin < 0) diffMin += 24 * 60; // 日跨ぎ対応
   const actualHours = roundHours(diffMin);  // 50-70分丸め
   const cappedHours = Math.min(actualHours, 8);
-  return { actual: actualHours, capped: cappedHours };
+  return { actual: actualHours, capped: cappedHours, isOverride: false };
 }
 
 // 月全体の人件費計算（補填ロジック含む）
@@ -3766,6 +3803,8 @@ function calculateLaborCost(deliveries, hourly) {
       startTime: d.startTime || '-',
       endTime: d.endTime || '-',
       actualHours: hours.actual,
+      isOverride: hours.isOverride,
+      overrideNote: d.override_note || '',
       category,
       finalHours,
       note,
@@ -3950,9 +3989,12 @@ function renderInvoice() {
     
     dailyData.push({
       date: ld.date,
+      deliveryId: ld.delivery.id,
       startTime: ld.startTime,
       endTime: ld.endTime,
       actualHours: ld.actualHours,
+      isOverride: ld.isOverride,
+      overrideNote: ld.overrideNote,
       cappedHours: ld.finalHours,
       category: ld.category,
       note: ld.note,
@@ -4051,6 +4093,7 @@ function renderInvoice() {
             <th class="center">走行</th>
             <th class="center">経費</th>
             <th class="center">人件費</th>
+            ${state.currentUser.type==='admin'?'<th class="center">操作</th>':''}
           </tr></thead>
           <tbody>
             ${dailyData.map(d => {
@@ -4063,16 +4106,19 @@ function renderInvoice() {
                 return '<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;">✓ 確定</span>';
               })();
               const noteHtml = d.note ? `<div style="font-size:10px;color:#94a3b8;margin-top:2px;">${d.note}</div>` : '';
-              return `<tr>
-                <td style="font-weight:600;">${d.date}</td>
+              const overrideMark = d.isOverride ? '<span style="background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;margin-left:4px;" title="管理者が時間を上書きしました">✏️ 上書き</span>' : '';
+              const overrideNoteHtml = d.isOverride && d.overrideNote ? `<div style="font-size:10px;color:#1e40af;margin-top:2px;font-style:italic;">📝 ${d.overrideNote}</div>` : '';
+              return `<tr${d.isOverride?' style="background:#eff6ff;"':''}>
+                <td style="font-weight:600;">${d.date}${overrideMark}</td>
                 <td style="text-align:center;font-size:12px;">${d.startTime}</td>
                 <td style="text-align:center;font-size:12px;">${d.endTime}</td>
-                <td style="text-align:center;font-size:12px;">${fmtH(d.actualHours)}h</td>
-                <td style="text-align:center;">${catBadge}${noteHtml}</td>
+                <td style="text-align:center;font-size:12px;${d.isOverride?'color:#1e40af;font-weight:700;':''}">${fmtH(d.actualHours)}h</td>
+                <td style="text-align:center;">${catBadge}${noteHtml}${overrideNoteHtml}</td>
                 <td style="text-align:center;font-weight:700;color:#7c3aed;">${fmtH(d.cappedHours)}h</td>
                 <td style="text-align:center;font-size:12px;">${d.km>0?d.km+'km':'-'}</td>
                 <td style="text-align:center;font-size:12px;">${d.expense>0?'¥'+fmt(d.expense):'-'}</td>
                 <td style="text-align:right;font-weight:700;color:#054c9c;">¥${fmt(Math.round(hourly * d.cappedHours))}</td>
+                ${state.currentUser.type==='admin'?`<td style="text-align:center;"><button class="btn btn-outline btn-sm" style="padding:3px 8px;font-size:11px;" onclick="openOverrideModal('${d.deliveryId}')">${d.isOverride?'✏️ 編集':'⚙️ 調整'}</button></td>`:''}
               </tr>`;
             }).join('')}
           </tbody>
@@ -4110,6 +4156,92 @@ function renderInvoice() {
   }
   
   document.getElementById('invoiceContent').innerHTML = html;
+}
+
+// ============================================================
+// 労働時間の上書き（管理者用）
+// ============================================================
+function openOverrideModal(deliveryId) {
+  const d = state.deliveries.find(x => x.id === deliveryId);
+  if (!d) {
+    alert('日報が見つかりません');
+    return;
+  }
+  state.overrideTargetId = deliveryId;
+  
+  // 元の打刻時間
+  const startMin = timeStrToMinutes(d.startTime);
+  const endMin = timeStrToMinutes(d.endTime);
+  let originalHours = 0;
+  if (startMin != null && endMin != null) {
+    let diff = endMin - startMin;
+    if (diff < 0) diff += 24 * 60;
+    originalHours = roundHours(diff);
+  }
+  
+  const staff = state.staff.find(s => s.id === d.staffId);
+  const overrideStatus = (d.override_hours != null && d.override_hours !== '')
+    ? `<div style="color:#1e40af;font-weight:700;">✏️ 現在の上書き: ${d.override_hours}時間</div>${d.override_note?`<div style="font-size:11px;color:#64748b;margin-top:3px;">📝 ${d.override_note}</div>`:''}`
+    : '<div style="color:#64748b;font-size:12px;">（まだ上書きされていません）</div>';
+  
+  document.getElementById('overrideInfo').innerHTML = `
+    <div><strong>📅 ${d.date}</strong> / ${staff?.emoji||''} ${staff?.name||'?'}</div>
+    <div>⏰ 打刻: ${d.startTime||'-'} 〜 ${d.endTime||'-'} <span style="color:#64748b;">（実労 ${originalHours}h）</span></div>
+    <div style="margin-top:8px;">${overrideStatus}</div>
+  `;
+  
+  document.getElementById('ovr_hours').value = (d.override_hours != null && d.override_hours !== '') ? d.override_hours : '';
+  document.getElementById('ovr_note').value = d.override_note || '';
+  
+  openModal('overrideModal');
+}
+
+async function saveOverride() {
+  const id = state.overrideTargetId;
+  if (!id) return;
+  
+  const hoursStr = document.getElementById('ovr_hours').value.trim();
+  const noteStr = document.getElementById('ovr_note').value.trim();
+  
+  let updateData;
+  if (hoursStr === '') {
+    // 空欄 = 上書き解除
+    if (!confirm('上書きを解除して、元の打刻時間に戻しますか？')) return;
+    updateData = {
+      override_hours: null,
+      override_note: null,
+      override_by: null,
+      override_at: null,
+    };
+  } else {
+    const hours = parseFloat(hoursStr);
+    if (isNaN(hours) || hours < 0 || hours > 24) {
+      alert('時間は0〜24の範囲で入力してください');
+      return;
+    }
+    updateData = {
+      override_hours: hours,
+      override_note: noteStr || null,
+      override_by: state.currentUser.id || 'admin',
+      override_at: new Date().toISOString(),
+    };
+  }
+  
+  setBtn('saveOverrideBtn', true);
+  const {error} = await sb.from('deliveries').update(updateData).eq('id', id);
+  setBtn('saveOverrideBtn', false);
+  
+  if (error) {
+    alert('保存に失敗しました: ' + error.message);
+    return;
+  }
+  
+  // ローカルstateも更新
+  const d = state.deliveries.find(x => x.id === id);
+  if (d) Object.assign(d, updateData);
+  
+  closeModal('overrideModal');
+  renderInvoice();  // 請求書ページを再描画
 }
 
 // 期間プリセット
@@ -4338,6 +4470,8 @@ function printInvoice() {
       startTime: ld.startTime,
       endTime: ld.endTime,
       actualHours: ld.actualHours,
+      isOverride: ld.isOverride,
+      overrideNote: ld.overrideNote,
       cappedHours: ld.finalHours,
       category: ld.category,
       note: ld.note,
