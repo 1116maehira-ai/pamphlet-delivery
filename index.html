@@ -392,6 +392,8 @@ input[type=file] { display:none; }
     <div class="page" id="page-invoice"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" fill="#054c9c"/><path d="M7 8h10M7 12h10M7 16h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/><circle cx="17" cy="16" r="2" fill="#fbbf24"/></svg>請求書算出</span></div><div id="invoiceContent"></div></div>
     <!-- DMM_INVOICE (DMM/I&S BBDO向け請求書) -->
     <div class="page" id="page-dmm_invoice"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0891b2"/><path d="M7 8h10M7 12h10M7 16h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/><circle cx="17" cy="16" r="2" fill="#fde047"/></svg>DMM請求書（I&amp;S BBDO向け）</span></div><div id="dmmInvoiceContent"></div></div>
+    <!-- COST_SUMMARY (原価サマリー) -->
+    <div class="page" id="page-cost_summary"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#dc2626"/><path d="M12 6v6l4 2" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>原価サマリー</span></div><div id="costSummaryContent"></div></div>
     <!-- PROFILE (担当者用) -->
     <div class="page" id="page-profile"><div class="pageTitle"><span style="display:inline-flex;align-items:center;gap:8px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" fill="#054c9c"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7" stroke="#054c9c" stroke-width="2" fill="none" stroke-linecap="round"/></svg>プロフィール</span></div><div id="profileContent"></div></div>
     <!-- ROUTE -->
@@ -1729,6 +1731,7 @@ const ADMIN_PAGES = [
   {id:'reports',label:'report',text:'日報'},
   {id:'invoice',label:'invoice',text:'請求書'},
   {id:'dmm_invoice',label:'invoice',text:'DMM請求'},
+  {id:'cost_summary',label:'invoice',text:'原価サマリー'},
   {id:'contact',label:'bell',text:'お問い合わせ'},
 ];
 const STAFF_PAGES = [
@@ -1794,6 +1797,7 @@ function renderPage(id) {
     case 'reports': renderReports(); break;
     case 'invoice': renderInvoice(); break;
     case 'dmm_invoice': renderDmmInvoice(); break;
+    case 'cost_summary': renderCostSummary(); break;
     case 'profile': renderProfile(); break;
     case 'availability': renderAvailability(); break;
     case 'contact': renderContact(); break;
@@ -4376,6 +4380,445 @@ function calculateDmmInvoice(mode, ym, staffId, unitPrice) {
     unitPrice,
     cur, prev,
   };
+}
+
+    unitPrice,
+    cur, prev,
+  };
+}
+
+// ============================================================
+// 原価サマリー（管理者専用）
+// ============================================================
+function renderCostSummary() {
+  // state初期化
+  if (!state.costPeriodStart) {
+    const now = new Date();
+    state.costPeriodStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  }
+  if (!state.costPeriodEnd) {
+    const now = new Date();
+    const end = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    state.costPeriodEnd = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`;
+  }
+  if (!state.costStaffFilter) state.costStaffFilter = 'all';
+  
+  const fmt = (n) => n.toLocaleString();
+  const fmtH = (h) => h.toFixed(1);
+  const fuelPrice = state.fuelPrice || 180;
+  
+  const targetStaff = state.costStaffFilter === 'all' 
+    ? state.staff
+    : state.staff.filter(s => s.id === state.costStaffFilter);
+  
+  const perStaff = [];
+  let totalDays = 0, totalActualHours = 0, totalCappedHours = 0, totalKm = 0;
+  let totalLaborCost = 0, totalLaborTax = 0, totalFuelCost = 0, totalExpense = 0;
+  
+  targetStaff.forEach(s => {
+    const hourly = s.hourly_wage || 0;
+    const fuel = s.fuel || 8;
+    const deliveries = state.deliveries.filter(d =>
+      d.staffId === s.id &&
+      d.ended === true &&
+      d.date >= state.costPeriodStart &&
+      d.date <= state.costPeriodEnd
+    ).sort((a,b) => a.date.localeCompare(b.date));
+    
+    if (deliveries.length === 0) return;
+    
+    const labor = calculateLaborCost(deliveries, hourly);
+    
+    let staffKm = 0, staffExpense = 0;
+    deliveries.forEach(d => {
+      const km = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
+      if (km > 0) staffKm += km;
+      try {
+        JSON.parse(d.receipt_data || '[]').forEach(r => { staffExpense += parseInt(r.amount) || 0; });
+      } catch(e) {}
+    });
+    
+    const staffFuelCost = fuel > 0 && staffKm > 0 ? Math.round((staffKm / fuel) * fuelPrice) : 0;
+    const staffTotal = labor.laborCostTotal + staffFuelCost + staffExpense;
+    
+    perStaff.push({
+      id: s.id, name: s.name, emoji: s.emoji, hourly, fuel,
+      days: deliveries.length,
+      actualHours: labor.totalActualHours,
+      cappedHours: labor.totalCappedHours,
+      laborCost: labor.laborCost,
+      laborTax: labor.laborTax,
+      laborCostTotal: labor.laborCostTotal,
+      km: staffKm,
+      fuelCost: staffFuelCost,
+      expense: staffExpense,
+      total: staffTotal,
+    });
+    
+    totalDays += deliveries.length;
+    totalActualHours += labor.totalActualHours;
+    totalCappedHours += labor.totalCappedHours;
+    totalKm += staffKm;
+    totalLaborCost += labor.laborCost;
+    totalLaborTax += labor.laborTax;
+    totalFuelCost += staffFuelCost;
+    totalExpense += staffExpense;
+  });
+  
+  const totalLaborCostTotal = totalLaborCost + totalLaborTax;
+  const totalCost = totalLaborCostTotal + totalFuelCost + totalExpense;
+  const activeStaffCount = perStaff.length;
+  
+  const staffOptions = `
+    <option value="all" ${state.costStaffFilter==='all'?'selected':''}>全員</option>
+    ${state.staff.map(s => 
+      `<option value="${s.id}" ${state.costStaffFilter===s.id?'selected':''}>${s.emoji||'👤'} ${s.name}</option>`
+    ).join('')}
+  `;
+  
+  let html = `
+    <div class="card">
+      <p style="font-size:12px;color:var(--slate-light);margin:0 0 14px;">
+        指定期間内の原価（人件費・燃料費・経費）を一覧で確認できます。
+      </p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="formGroup" style="margin:0;">
+          <label class="formLabel">期間（開始）</label>
+          <input type="date" class="formInput" value="${state.costPeriodStart}" onchange="state.costPeriodStart=this.value;renderCostSummary()">
+        </div>
+        <div class="formGroup" style="margin:0;">
+          <label class="formLabel">期間（終了）</label>
+          <input type="date" class="formInput" value="${state.costPeriodEnd}" onchange="state.costPeriodEnd=this.value;renderCostSummary()">
+        </div>
+        <div class="formGroup" style="margin:0;">
+          <label class="formLabel">担当者</label>
+          <select class="formSelect" onchange="state.costStaffFilter=this.value;renderCostSummary()">
+            ${staffOptions}
+          </select>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-outline btn-sm" onclick="setCostPeriod('thisMonth')">今月</button>
+          <button class="btn btn-outline btn-sm" onclick="setCostPeriod('lastMonth')">先月</button>
+          <button class="btn btn-outline btn-sm" onclick="setCostPeriod('thisQuarter')">今四半期</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  if (perStaff.length === 0) {
+    html += '<div class="card" style="text-align:center;color:var(--slate-light);padding:40px;">指定期間内に稼働がありません</div>';
+    document.getElementById('costSummaryContent').innerHTML = html;
+    return;
+  }
+  
+  html += `
+    <div class="card" style="background:linear-gradient(135deg,#fef2f2,#fee2e2);border:2px solid #dc2626;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="font-size:28px;">💸</span>
+        <div>
+          <div style="font-size:18px;font-weight:800;color:#dc2626;">原価サマリー</div>
+          <div style="font-size:12px;color:#475569;">${state.costPeriodStart} 〜 ${state.costPeriodEnd}${state.costStaffFilter!=='all'?` ／ ${state.staff.find(s=>s.id===state.costStaffFilter)?.name||''}`:''}</div>
+        </div>
+      </div>
+      
+      <div style="background:white;border-radius:12px;padding:16px;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #e2e8f0;">
+          <div><div style="font-size:11px;color:#64748b;font-weight:600;">稼働人数</div><div style="font-size:22px;font-weight:800;color:#1e293b;">${activeStaffCount}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">人</span></div></div>
+          <div><div style="font-size:11px;color:#64748b;font-weight:600;">稼働日数</div><div style="font-size:22px;font-weight:800;color:#054c9c;">${totalDays}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">日</span></div></div>
+          <div><div style="font-size:11px;color:#64748b;font-weight:600;">合計実労</div><div style="font-size:22px;font-weight:800;color:#7c3aed;">${fmtH(totalActualHours)}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">h</span></div></div>
+          <div><div style="font-size:11px;color:#64748b;font-weight:600;">請求対象</div><div style="font-size:22px;font-weight:800;color:#7c3aed;">${fmtH(totalCappedHours)}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">h</span></div></div>
+          <div><div style="font-size:11px;color:#64748b;font-weight:600;">総走行距離</div><div style="font-size:22px;font-weight:800;color:#c2410c;">${fmt(Math.round(totalKm))}<span style="font-size:11px;color:#94a3b8;margin-left:3px;">km</span></div></div>
+        </div>
+        
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1e293b;">◾ 人件費（税別）</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">時給×時間の合計</div>
+          </div>
+          <div style="font-size:18px;font-weight:800;color:#054c9c;">¥${fmt(totalLaborCost)}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;">
+          <div style="font-size:11px;color:#64748b;">消費税（10%）</div>
+          <div style="font-size:14px;font-weight:600;color:#054c9c;">¥${fmt(totalLaborTax)}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0 8px;padding-left:14px;border-bottom:1px dashed #cbd5e1;">
+          <div style="font-size:12px;font-weight:600;color:#1e293b;">人件費 合計（税込）</div>
+          <div style="font-size:16px;font-weight:800;color:#054c9c;">¥${fmt(totalLaborCostTotal)}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1e293b;">◾ 燃料費</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">${fmt(Math.round(totalKm))}km × ¥${fuelPrice}/L</div>
+          </div>
+          <div style="font-size:18px;font-weight:800;color:#c2410c;">¥${fmt(totalFuelCost)}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px dashed #e2e8f0;">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1e293b;">◾ 経費（駐車・高速など）</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">担当者入力の領収書記録</div>
+          </div>
+          <div style="font-size:18px;font-weight:800;color:#7c3aed;">¥${fmt(totalExpense)}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 6px;border-top:2px solid #dc2626;margin-top:8px;">
+          <div style="font-size:16px;font-weight:800;color:#dc2626;">💸 原価合計</div>
+          <div style="font-size:26px;font-weight:900;color:#dc2626;">¥${fmt(totalCost)}</div>
+        </div>
+        <div style="text-align:right;font-size:10px;color:#94a3b8;">（うち消費税 ¥${fmt(totalLaborTax)}）</div>
+      </div>
+      
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="exportCostCsv()">📥 CSV出力</button>
+        <button class="btn btn-primary btn-sm" onclick="printCostSummary()">${icon('pdf')} PDF出力</button>
+      </div>
+    </div>
+  `;
+  
+  if (state.costStaffFilter === 'all') {
+    html += `
+      <div class="card">
+        <div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;">👥 担当者別内訳</span></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr>
+              <th>担当者</th>
+              <th class="center">稼働日</th>
+              <th class="center">実労</th>
+              <th class="center">請求対象</th>
+              <th class="right">人件費(税別)</th>
+              <th class="right">消費税</th>
+              <th class="right">人件費計</th>
+              <th class="right">燃料費</th>
+              <th class="right">経費</th>
+              <th class="right">合計原価</th>
+            </tr></thead>
+            <tbody>
+              ${perStaff.map(p => `
+                <tr>
+                  <td>${p.emoji||'👤'} <strong>${p.name}</strong> <span style="font-size:10px;color:#94a3b8;">¥${fmt(p.hourly)}/h</span></td>
+                  <td class="center">${p.days}日</td>
+                  <td class="center">${fmtH(p.actualHours)}h</td>
+                  <td class="center" style="font-weight:700;color:#7c3aed;">${fmtH(p.cappedHours)}h</td>
+                  <td class="right">¥${fmt(p.laborCost)}</td>
+                  <td class="right" style="color:#64748b;font-size:11px;">¥${fmt(p.laborTax)}</td>
+                  <td class="right" style="font-weight:700;color:#054c9c;">¥${fmt(p.laborCostTotal)}</td>
+                  <td class="right" style="color:#c2410c;">¥${fmt(p.fuelCost)}<div style="font-size:9px;color:#94a3b8;">${fmt(Math.round(p.km))}km</div></td>
+                  <td class="right" style="color:#7c3aed;">¥${fmt(p.expense)}</td>
+                  <td class="right" style="font-weight:800;color:#dc2626;">¥${fmt(p.total)}</td>
+                </tr>
+              `).join('')}
+              <tr style="background:#fef2f2;font-weight:800;">
+                <td>合計</td>
+                <td class="center">${totalDays}日</td>
+                <td class="center">${fmtH(totalActualHours)}h</td>
+                <td class="center">${fmtH(totalCappedHours)}h</td>
+                <td class="right">¥${fmt(totalLaborCost)}</td>
+                <td class="right">¥${fmt(totalLaborTax)}</td>
+                <td class="right">¥${fmt(totalLaborCostTotal)}</td>
+                <td class="right">¥${fmt(totalFuelCost)}<div style="font-size:9px;color:#94a3b8;font-weight:500;">${fmt(Math.round(totalKm))}km</div></td>
+                <td class="right">¥${fmt(totalExpense)}</td>
+                <td class="right" style="color:#dc2626;font-size:14px;">¥${fmt(totalCost)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+  
+  document.getElementById('costSummaryContent').innerHTML = html;
+}
+
+function setCostPeriod(preset) {
+  const now = new Date();
+  if (preset === 'thisMonth') {
+    state.costPeriodStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    const end = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    state.costPeriodEnd = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`;
+  } else if (preset === 'lastMonth') {
+    const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    state.costPeriodStart = `${lm.getFullYear()}-${String(lm.getMonth()+1).padStart(2,'0')}-01`;
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    state.costPeriodEnd = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`;
+  } else if (preset === 'thisQuarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    const startMonth = q * 3;
+    const startD = new Date(now.getFullYear(), startMonth, 1);
+    state.costPeriodStart = `${startD.getFullYear()}-${String(startD.getMonth()+1).padStart(2,'0')}-01`;
+    const endD = new Date(now.getFullYear(), startMonth+3, 0);
+    state.costPeriodEnd = `${endD.getFullYear()}-${String(endD.getMonth()+1).padStart(2,'0')}-${String(endD.getDate()).padStart(2,'0')}`;
+  }
+  renderCostSummary();
+}
+
+function exportCostCsv() {
+  const fuelPrice = state.fuelPrice || 180;
+  const targetStaff = state.costStaffFilter === 'all' 
+    ? state.staff
+    : state.staff.filter(s => s.id === state.costStaffFilter);
+  
+  let csv = '担当者,時給,稼働日,実労時間,請求対象時間,走行km,人件費(税別),消費税,人件費合計,燃料費,経費,合計原価\n';
+  let totals = {days:0, actual:0, capped:0, km:0, labor:0, tax:0, total:0, fuel:0, exp:0, grand:0};
+  
+  targetStaff.forEach(s => {
+    const hourly = s.hourly_wage || 0;
+    const fuel = s.fuel || 8;
+    const deliveries = state.deliveries.filter(d =>
+      d.staffId === s.id && d.ended === true &&
+      d.date >= state.costPeriodStart && d.date <= state.costPeriodEnd
+    );
+    if (deliveries.length === 0) return;
+    
+    const labor = calculateLaborCost(deliveries, hourly);
+    let km = 0, exp = 0;
+    deliveries.forEach(d => {
+      const dKm = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
+      if (dKm > 0) km += dKm;
+      try { JSON.parse(d.receipt_data || '[]').forEach(r => exp += parseInt(r.amount)||0); } catch(e) {}
+    });
+    const fuelCost = fuel > 0 && km > 0 ? Math.round((km / fuel) * fuelPrice) : 0;
+    const total = labor.laborCostTotal + fuelCost + exp;
+    
+    csv += `${s.name},${hourly},${deliveries.length},${labor.totalActualHours.toFixed(1)},${labor.totalCappedHours.toFixed(1)},${Math.round(km)},${labor.laborCost},${labor.laborTax},${labor.laborCostTotal},${fuelCost},${exp},${total}\n`;
+    
+    totals.days += deliveries.length;
+    totals.actual += labor.totalActualHours;
+    totals.capped += labor.totalCappedHours;
+    totals.km += km;
+    totals.labor += labor.laborCost;
+    totals.tax += labor.laborTax;
+    totals.total += labor.laborCostTotal;
+    totals.fuel += fuelCost;
+    totals.exp += exp;
+    totals.grand += total;
+  });
+  
+  csv += `合計,,${totals.days},${totals.actual.toFixed(1)},${totals.capped.toFixed(1)},${Math.round(totals.km)},${totals.labor},${totals.tax},${totals.total},${totals.fuel},${totals.exp},${totals.grand}\n`;
+  
+  const blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `原価サマリー_${state.costPeriodStart}_${state.costPeriodEnd}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function printCostSummary() {
+  const fuelPrice = state.fuelPrice || 180;
+  const fmt = (n) => n.toLocaleString();
+  const fmtH = (h) => h.toFixed(1);
+  const targetStaff = state.costStaffFilter === 'all' 
+    ? state.staff
+    : state.staff.filter(s => s.id === state.costStaffFilter);
+  
+  const perStaff = [];
+  let totals = {days:0, actual:0, capped:0, km:0, labor:0, tax:0, laborTotal:0, fuel:0, exp:0, grand:0};
+  
+  targetStaff.forEach(s => {
+    const hourly = s.hourly_wage || 0;
+    const fuel = s.fuel || 8;
+    const deliveries = state.deliveries.filter(d =>
+      d.staffId === s.id && d.ended === true &&
+      d.date >= state.costPeriodStart && d.date <= state.costPeriodEnd
+    );
+    if (deliveries.length === 0) return;
+    
+    const labor = calculateLaborCost(deliveries, hourly);
+    let km = 0, exp = 0;
+    deliveries.forEach(d => {
+      const dKm = (parseFloat(d.endKm)||0) - (parseFloat(d.startKm)||0);
+      if (dKm > 0) km += dKm;
+      try { JSON.parse(d.receipt_data || '[]').forEach(r => exp += parseInt(r.amount)||0); } catch(e) {}
+    });
+    const fuelCost = fuel > 0 && km > 0 ? Math.round((km / fuel) * fuelPrice) : 0;
+    const total = labor.laborCostTotal + fuelCost + exp;
+    
+    perStaff.push({name:s.name, hourly, days:deliveries.length, actualHours:labor.totalActualHours, cappedHours:labor.totalCappedHours, km, laborCost:labor.laborCost, laborTax:labor.laborTax, laborCostTotal:labor.laborCostTotal, fuelCost, expense:exp, total});
+    
+    totals.days += deliveries.length;
+    totals.actual += labor.totalActualHours;
+    totals.capped += labor.totalCappedHours;
+    totals.km += km;
+    totals.labor += labor.laborCost;
+    totals.tax += labor.laborTax;
+    totals.laborTotal += labor.laborCostTotal;
+    totals.fuel += fuelCost;
+    totals.exp += exp;
+    totals.grand += total;
+  });
+  
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>原価サマリー ${state.costPeriodStart}〜${state.costPeriodEnd}</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  body{font-family:'Hiragino Sans','Noto Sans JP',sans-serif;color:#1e293b;padding:20px;}
+  h1{font-size:24px;color:#dc2626;margin:0 0 4px;}
+  .sub{color:#64748b;font-size:12px;margin-bottom:18px;}
+  .summary{background:#fef2f2;border:2px solid #dc2626;border-radius:8px;padding:14px;margin-bottom:16px;}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;}
+  .lbl{font-size:13px;font-weight:700;}
+  .desc{font-size:10px;color:#64748b;margin-top:2px;}
+  .amt{font-size:16px;font-weight:800;color:#dc2626;}
+  table{width:100%;border-collapse:collapse;font-size:10px;margin-top:10px;}
+  th{background:#1e293b;color:white;padding:6px;text-align:left;}
+  td{padding:6px;border-bottom:1px solid #e2e8f0;}
+  .center{text-align:center;}
+  .right{text-align:right;}
+  .total-row{background:#fef2f2;font-weight:800;}
+  @media print{body{padding:0;}}
+</style>
+</head><body>
+<h1>💸 原価サマリー</h1>
+<div class="sub">${state.costPeriodStart} 〜 ${state.costPeriodEnd}${state.costStaffFilter!=='all'?` ／ ${state.staff.find(s=>s.id===state.costStaffFilter)?.name||''}`:''}</div>
+
+<div class="summary">
+  <div class="row"><div><div class="lbl">◾ 人件費（税別）</div><div class="desc">${totals.days}日 × 各時給</div></div><div class="amt" style="color:#054c9c;">¥${fmt(totals.labor)}</div></div>
+  <div class="row" style="padding-left:14px;"><div class="lbl" style="font-size:11px;font-weight:600;">消費税（10%）</div><div style="font-size:13px;font-weight:600;color:#054c9c;">¥${fmt(totals.tax)}</div></div>
+  <div class="row" style="padding-left:14px;border-bottom:1px dashed #cbd5e1;"><div class="lbl" style="font-size:12px;">人件費 合計（税込）</div><div style="font-size:14px;font-weight:800;color:#054c9c;">¥${fmt(totals.laborTotal)}</div></div>
+  <div class="row"><div><div class="lbl">◾ 燃料費</div><div class="desc">${fmt(Math.round(totals.km))}km × ¥${fuelPrice}/L</div></div><div class="amt" style="color:#c2410c;">¥${fmt(totals.fuel)}</div></div>
+  <div class="row"><div><div class="lbl">◾ 経費</div><div class="desc">領収書記録</div></div><div class="amt" style="color:#7c3aed;">¥${fmt(totals.exp)}</div></div>
+  <div class="row" style="border-top:2px solid #dc2626;margin-top:6px;padding-top:10px;"><div class="lbl" style="font-size:15px;">💸 原価合計</div><div class="amt" style="font-size:22px;">¥${fmt(totals.grand)}</div></div>
+</div>
+
+${state.costStaffFilter==='all' ? `
+<h2 style="font-size:14px;margin-top:18px;border-bottom:2px solid #1e293b;padding-bottom:4px;">担当者別内訳</h2>
+<table>
+  <thead><tr><th>担当者</th><th class="center">時給</th><th class="center">稼働日</th><th class="center">実労</th><th class="center">請求対象</th><th class="right">人件費(税別)</th><th class="right">消費税</th><th class="right">人件費計</th><th class="right">燃料費</th><th class="right">経費</th><th class="right">合計</th></tr></thead>
+  <tbody>
+    ${perStaff.map(p=>`<tr>
+      <td><strong>${p.name}</strong></td>
+      <td class="center">¥${fmt(p.hourly)}</td>
+      <td class="center">${p.days}日</td>
+      <td class="center">${fmtH(p.actualHours)}h</td>
+      <td class="center">${fmtH(p.cappedHours)}h</td>
+      <td class="right">¥${fmt(p.laborCost)}</td>
+      <td class="right">¥${fmt(p.laborTax)}</td>
+      <td class="right"><strong>¥${fmt(p.laborCostTotal)}</strong></td>
+      <td class="right">¥${fmt(p.fuelCost)}</td>
+      <td class="right">¥${fmt(p.expense)}</td>
+      <td class="right"><strong>¥${fmt(p.total)}</strong></td>
+    </tr>`).join('')}
+    <tr class="total-row">
+      <td>合計</td>
+      <td class="center">-</td>
+      <td class="center">${totals.days}日</td>
+      <td class="center">${fmtH(totals.actual)}h</td>
+      <td class="center">${fmtH(totals.capped)}h</td>
+      <td class="right">¥${fmt(totals.labor)}</td>
+      <td class="right">¥${fmt(totals.tax)}</td>
+      <td class="right">¥${fmt(totals.laborTotal)}</td>
+      <td class="right">¥${fmt(totals.fuel)}</td>
+      <td class="right">¥${fmt(totals.exp)}</td>
+      <td class="right" style="color:#dc2626;">¥${fmt(totals.grand)}</td>
+    </tr>
+  </tbody>
+</table>
+` : ''}
+
+<div style="margin-top:24px;text-align:right;font-size:10px;color:#94a3b8;">出力日: ${new Date().toLocaleString('ja-JP')}</div>
+<script>setTimeout(()=>window.print(), 500);<\/script>
+</body></html>`);
+  win.document.close();
 }
 
 function renderDmmInvoice() {
