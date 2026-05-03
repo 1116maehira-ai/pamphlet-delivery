@@ -477,6 +477,43 @@ input[type=file] { display:none; }
   </div>
 </div>
 
+<div class="modal-overlay" id="expenseEditModal">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header"><div class="modal-title">💴 経費の編集</div><button class="modal-close" onclick="closeModal('expenseEditModal')">✕</button></div>
+    <div class="modal-body">
+      <div id="expenseEditInfo" style="background:#f1f5f9;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;"></div>
+      
+      <div id="expenseEditPhotos" style="margin-bottom:14px;"></div>
+      
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#1e293b;">経費の明細</div>
+      <div class="tableWrap">
+        <table id="expenseEditTable">
+          <thead><tr>
+            <th style="width:130px;">日付</th>
+            <th>場所・内容</th>
+            <th style="width:120px;">カテゴリ</th>
+            <th style="width:110px;">金額(¥)</th>
+            <th style="width:50px;"></th>
+          </tr></thead>
+          <tbody id="expenseEditTbody"></tbody>
+        </table>
+      </div>
+      
+      <div style="text-align:center;margin-top:8px;">
+        <button class="btn btn-outline btn-sm" onclick="addExpenseEditRow()">+ 経費を追加</button>
+      </div>
+      
+      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:10px 12px;font-size:11px;color:#92400e;margin-top:14px;line-height:1.6;">
+        💡 領収書写真を確認しながら、金額・場所・カテゴリを入力してください
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('expenseEditModal')">キャンセル</button>
+      <button class="btn btn-primary" id="saveExpenseEditBtn" onclick="saveExpenseEdit()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="checkInModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="checkInTitle">施設報告</div><button class="modal-close" onclick="closeModal('checkInModal')">✕</button></div>
@@ -3152,11 +3189,22 @@ async function endDelivery() {
   const uid = state.currentUser.id;
   const endKm = document.getElementById('endKm').value;
   const endTime = document.getElementById('endTime').value;
-  setBtn('endDelivBtn', true);
   const meterEndUrls = collectPhotoUrls('meterEndPhotos');
   const tollUrls = collectPhotoUrls('tollPhotos');
   const delivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
   const receiptData = collectReceiptData();
+  
+  // 経費入力忘れチェック: 領収書写真があるのに、経費データが空
+  if (tollUrls.length > 0 && receiptData.length === 0) {
+    const proceed = confirm(
+      '⚠️ 領収書の写真がありますが、金額・場所が入力されていません。\n\n' +
+      '【OK】 このまま確定する（あとで管理者または自分で修正可能）\n' +
+      '【キャンセル】 戻って金額を入力する'
+    );
+    if (!proceed) return;
+  }
+  
+  setBtn('endDelivBtn', true);
   if (delivery) {
     await sb.from('deliveries').update({
       ended:true, end_km:endKm, end_time:endTime,
@@ -3665,7 +3713,39 @@ function renderReports() {
           const toll = (() => { try { return JSON.parse(d.toll_photos||'[]'); } catch(e){ return []; } })();
           const photoSection = (label, urls) => urls.length ? `<div style="margin-bottom:8px;"><div style="font-size:12px;font-weight:600;color:var(--slate-mid);margin-bottom:4px;">${label}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${urls.map(u=>`<a href="${u}" target="_blank" onclick="event.stopPropagation();"><img src="${u}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;"></a>`).join('')}</div></div>` : '';
           const sections = photoSection('📸 開始メーター', mStart) + photoSection('📸 終了メーター', mEnd) + photoSection('<span style="display:inline-flex;align-items:center;gap:5px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="14" height="18" rx="2" fill="#054c9c" opacity="0.8"/><path d="M8 7h8M8 11h8M8 15h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/><path d="M4 20l2-2 2 2 2-2 2 2 2-2 2 2" stroke="#054c9c" stroke-width="1.2" fill="none"/></svg>領収書</span>', toll);
-          return sections ? `<div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;">${sections}</div>` : '';
+          
+          // 経費データ
+          const receipts = (() => { try { return JSON.parse(d.receipt_data||'[]'); } catch(e){ return []; } })();
+          const totalExpense = receipts.reduce((s,r) => s + (parseInt(r.amount)||0), 0);
+          
+          // 自分の日報 or 管理者なら編集可能
+          const canEdit = state.currentUser.type === 'admin' || d.staffId === state.currentUser.id;
+          
+          // 警告: 領収書写真があるのに経費が空
+          const hasWarning = toll.length > 0 && receipts.length === 0;
+          
+          let expenseSection = '';
+          if (receipts.length > 0 || toll.length > 0) {
+            expenseSection = `
+              <div style="margin-top:8px;padding:10px;background:white;border:1px solid #e2e8f0;border-radius:8px;" onclick="event.stopPropagation();">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                  <div style="font-size:12px;font-weight:700;color:#1e293b;">💴 経費明細 ${receipts.length>0?`(${receipts.length}件 / 合計 ¥${totalExpense.toLocaleString()})`:''}</div>
+                  ${canEdit ? `<button class="btn btn-outline btn-sm" style="padding:3px 10px;font-size:11px;" onclick="openExpenseEditModal('${d.id}')">${receipts.length===0?'➕ 入力':'✏️ 編集'}</button>` : ''}
+                </div>
+                ${hasWarning ? '<div style="background:#fef3c7;border:1px solid #fbbf24;color:#92400e;padding:6px 10px;border-radius:6px;font-size:11px;margin-bottom:6px;">⚠️ 領収書写真がありますが、金額が未入力です</div>' : ''}
+                ${receipts.length > 0 ? `
+                  <table style="font-size:11px;">
+                    <thead><tr><th>日付</th><th>場所</th><th>カテゴリ</th><th style="text-align:right;">金額</th></tr></thead>
+                    <tbody>
+                      ${receipts.map(r => `<tr><td>${r.date||'-'}</td><td>${r.place||'-'}</td><td>${r.category||'-'}</td><td style="text-align:right;font-weight:600;">¥${(r.amount||0).toLocaleString()}</td></tr>`).join('')}
+                    </tbody>
+                  </table>
+                ` : ''}
+              </div>
+            `;
+          }
+          
+          return (sections || expenseSection) ? `<div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;">${sections}${expenseSection}</div>` : '';
         })()}
         ${reports.length>0 ? `
         <div style="margin-top:12px;" onclick="event.stopPropagation();">
@@ -4741,6 +4821,132 @@ async function saveOverride() {
   
   closeModal('overrideModal');
   renderInvoice();  // 請求書ページを再描画
+}
+
+// ============================================================
+// 経費の後編集（管理者・担当者両方が使える）
+// ============================================================
+function openExpenseEditModal(deliveryId) {
+  const d = state.deliveries.find(x => x.id === deliveryId);
+  if (!d) {
+    alert('日報が見つかりません');
+    return;
+  }
+  
+  // 担当者の場合、自分の日報以外は編集不可
+  if (state.currentUser.type === 'staff' && d.staffId !== state.currentUser.id) {
+    alert('自分の日報のみ編集可能です');
+    return;
+  }
+  
+  state.expenseEditTargetId = deliveryId;
+  
+  const staff = state.staff.find(s => s.id === d.staffId);
+  
+  // 既存の経費データ読み込み
+  let receipts = [];
+  try { receipts = JSON.parse(d.receipt_data || '[]'); } catch(e) {}
+  
+  // 領収書写真
+  let tollPhotos = [];
+  try { tollPhotos = JSON.parse(d.toll_photos || '[]'); } catch(e) {}
+  
+  // 情報パネル
+  document.getElementById('expenseEditInfo').innerHTML = `
+    <div><strong>📅 ${d.date}</strong> / ${staff?.emoji||''} ${staff?.name||'?'}</div>
+    <div style="font-size:11px;color:#64748b;margin-top:4px;">⏰ ${d.startTime||'-'} 〜 ${d.endTime||'-'}</div>
+  `;
+  
+  // 領収書写真表示
+  const photosDiv = document.getElementById('expenseEditPhotos');
+  if (tollPhotos.length > 0) {
+    photosDiv.innerHTML = `
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:#1e293b;">📷 領収書写真（${tollPhotos.length}枚）</div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding:8px;background:#f8fafc;border-radius:6px;">
+        ${tollPhotos.map(url => `
+          <a href="${url}" target="_blank" style="flex-shrink:0;">
+            <img src="${url}" style="height:120px;width:auto;border-radius:6px;border:1px solid #e2e8f0;cursor:zoom-in;">
+          </a>
+        `).join('')}
+      </div>
+    `;
+  } else {
+    photosDiv.innerHTML = '<div style="font-size:11px;color:#94a3b8;">📷 領収書写真はありません</div>';
+  }
+  
+  // 経費明細テーブル
+  const tbody = document.getElementById('expenseEditTbody');
+  tbody.innerHTML = '';
+  
+  if (receipts.length === 0) {
+    // 空の行を1つ追加
+    addExpenseEditRow(d.date);
+  } else {
+    receipts.forEach(r => addExpenseEditRow(r.date || d.date, r.place, r.category, r.amount));
+  }
+  
+  openModal('expenseEditModal');
+}
+
+function addExpenseEditRow(date, place, category, amount) {
+  const tbody = document.getElementById('expenseEditTbody');
+  const today = state.today || new Date().toISOString().slice(0,10);
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="date" class="formInput" style="font-size:12px;padding:5px;" value="${date||today}"></td>
+    <td><input type="text" class="formInput" style="font-size:12px;padding:5px;" placeholder="例: 那覇空港〜恩納" value="${place||''}"></td>
+    <td>
+      <select class="formSelect" style="font-size:12px;padding:5px;">
+        <option value="高速料金" ${category==='高速料金'?'selected':''}>高速料金</option>
+        <option value="駐車料金" ${category==='駐車料金'?'selected':''}>駐車料金</option>
+        <option value="ガソリン代" ${category==='ガソリン代'?'selected':''}>ガソリン代</option>
+        <option value="その他" ${category==='その他'?'selected':''}>その他</option>
+      </select>
+    </td>
+    <td><input type="number" class="formInput" style="font-size:12px;padding:5px;text-align:right;" placeholder="0" min="0" value="${amount||''}"></td>
+    <td style="text-align:center;"><button class="btn btn-outline btn-sm" style="padding:3px 8px;font-size:14px;color:#dc2626;border-color:#fecaca;" onclick="this.closest('tr').remove()">🗑</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+async function saveExpenseEdit() {
+  const id = state.expenseEditTargetId;
+  if (!id) return;
+  
+  const tbody = document.getElementById('expenseEditTbody');
+  const receiptData = Array.from(tbody.querySelectorAll('tr')).map(tr => {
+    const inputs = tr.querySelectorAll('input,select');
+    return {
+      date: inputs[0]?.value || '',
+      place: inputs[1]?.value || '',
+      category: inputs[2]?.value || '',
+      amount: parseInt(inputs[3]?.value) || 0,
+    };
+  }).filter(r => r.amount > 0 || r.place);
+  
+  setBtn('saveExpenseEditBtn', true);
+  const {error} = await sb.from('deliveries').update({
+    receipt_data: JSON.stringify(receiptData)
+  }).eq('id', id);
+  setBtn('saveExpenseEditBtn', false);
+  
+  if (error) {
+    alert('保存に失敗しました: ' + error.message);
+    return;
+  }
+  
+  // ローカルstateも更新
+  const d = state.deliveries.find(x => x.id === id);
+  if (d) d.receipt_data = JSON.stringify(receiptData);
+  
+  closeModal('expenseEditModal');
+  
+  // 現在ページを再描画
+  if (currentPage === 'reports') renderReports();
+  else if (currentPage === 'invoice') renderInvoice();
+  else if (currentPage === 'dmm_invoice') renderDmmInvoice();
+  
+  alert('✓ 経費を保存しました');
 }
 
 // 期間プリセット
