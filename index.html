@@ -4253,6 +4253,54 @@ function renderInvoice() {
 // DMM請求書 (I&S BBDO向け、見積もり/請求書)
 // ============================================================
 
+// ============================================================
+// DMM請求対象の調整（管理者用）
+// ============================================================
+async function updateDmmBillable(deliveryId, billable) {
+  const {error} = await sb.from('deliveries').update({
+    dmm_billable: billable
+  }).eq('id', deliveryId);
+  if (error) {
+    alert('保存に失敗しました: ' + error.message);
+    return;
+  }
+  // ローカルstateも更新
+  const d = state.deliveries.find(x => x.id === deliveryId);
+  if (d) d.dmm_billable = billable;
+  renderDmmInvoice();
+}
+
+async function updateDmmPair(deliveryId, pairId) {
+  // ペアの相手にも逆方向のペア情報を設定
+  const myPairValue = pairId || null;
+  
+  const {error} = await sb.from('deliveries').update({
+    dmm_pair_with: myPairValue
+  }).eq('id', deliveryId);
+  if (error) {
+    alert('保存に失敗しました: ' + error.message);
+    return;
+  }
+  // ローカルstateも更新
+  const d = state.deliveries.find(x => x.id === deliveryId);
+  if (d) d.dmm_pair_with = myPairValue;
+  
+  renderDmmInvoice();
+}
+
+async function updateDmmNote(deliveryId, note) {
+  const {error} = await sb.from('deliveries').update({
+    dmm_note: note || null
+  }).eq('id', deliveryId);
+  if (error) {
+    alert('保存に失敗しました: ' + error.message);
+    return;
+  }
+  const d = state.deliveries.find(x => x.id === deliveryId);
+  if (d) d.dmm_note = note;
+  // メモ更新では再描画不要（フォーカス維持のため）
+}
+
 // 月文字列をパース "YYYY-MM" → {year, month, prevYear, prevMonth}
 function parseDmmMonth(ym) {
   const [y, m] = ym.split('-').map(Number);
@@ -4304,18 +4352,31 @@ function calculateDmmInvoice(mode, ym, staffId, unitPrice) {
     });
   } else {
     // 請求書: 実際の稼働日（ended:true）を取得
+    // dmm_billable=false と dmm_pair_with(ペアの相方)は除外
     targetStaffIds.forEach(sid => {
       const staff = state.staff.find(s => s.id === sid);
       if (!staff) return;
-      const deliveries = state.deliveries.filter(d =>
+      const allDeliveries = state.deliveries.filter(d =>
         d.staffId === sid &&
         d.ended === true &&
         d.date >= cur.start &&
         d.date <= cur.end
       );
-      const days = deliveries.length;
+      // 請求対象としてカウントする条件:
+      // 1. dmm_billable !== false（デフォルトtrue）
+      // 2. dmm_pair_with が空（ペアの相方ではない）
+      const billableDeliveries = allDeliveries.filter(d => 
+        d.dmm_billable !== false && !d.dmm_pair_with
+      );
+      const days = billableDeliveries.length;
       workDays += days;
-      workDaysBreakdown.push({ staffId: sid, name: staff.name, emoji: staff.emoji, days });
+      workDaysBreakdown.push({ 
+        staffId: sid, 
+        name: staff.name, 
+        emoji: staff.emoji, 
+        days,
+        totalDays: allDeliveries.length,  // 実稼働総数（参考）
+      });
     });
   }
   
@@ -4950,18 +5011,20 @@ function renderDmmInvoice() {
         <div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;">👥 担当者ごとの${workDayLabel}</span></div>
         <div class="tableWrap">
           <table>
-            <thead><tr><th>担当者</th><th class="center">${workDayLabel}</th><th class="right">販売金額（税抜）</th></tr></thead>
+            <thead><tr><th>担当者</th><th class="center">${workDayLabel}</th>${state.dmmMode==='invoice'?'<th class="center">実稼働</th>':''}<th class="right">販売金額（税抜）</th></tr></thead>
             <tbody>
-              ${result.workDaysBreakdown.filter(b => b.days > 0).map(b => `
+              ${result.workDaysBreakdown.filter(b => b.days > 0 || (b.totalDays && b.totalDays > 0)).map(b => `
                 <tr>
                   <td>${b.emoji||'👤'} ${b.name}</td>
                   <td style="text-align:center;font-weight:700;">${b.days}日</td>
+                  ${state.dmmMode==='invoice' && b.totalDays ? `<td style="text-align:center;color:#94a3b8;font-size:11px;">${b.totalDays}日${b.totalDays!==b.days?` <span style="color:#dc2626;">(${b.totalDays-b.days}日除外)</span>`:''}</td>` : (state.dmmMode==='invoice'?'<td></td>':'')}
                   <td style="text-align:right;">¥${fmt(b.days * state.dmmUnitPrice)}</td>
                 </tr>
               `).join('')}
               <tr style="background:#f1f5f9;font-weight:800;">
                 <td>合計</td>
                 <td style="text-align:center;color:#0891b2;">${result.workDays}日</td>
+                ${state.dmmMode==='invoice' ? `<td></td>` : ''}
                 <td style="text-align:right;color:#0891b2;">¥${fmt(result.salesAmount)}</td>
               </tr>
             </tbody>
@@ -4969,6 +5032,94 @@ function renderDmmInvoice() {
         </div>
       </div>
     `;
+  }
+  
+  // 日別請求調整カード（請求書モードのみ）
+  if (state.dmmMode === 'invoice') {
+    // 該当期間の全deliveries取得
+    const allDeliv = state.staff
+      .filter(s => state.dmmStaffId === 'all' || s.id === state.dmmStaffId)
+      .flatMap(s => state.deliveries.filter(d =>
+        d.staffId === s.id &&
+        d.ended === true &&
+        d.date >= result.cur.start &&
+        d.date <= result.cur.end
+      ).map(d => ({...d, _staff: s})))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    if (allDeliv.length > 0) {
+      html += `
+        <div class="card">
+          <div class="cardTitle"><span style="display:inline-flex;align-items:center;gap:6px;">⚙️ 日別 請求対象の調整</span></div>
+          <p style="font-size:11px;color:var(--slate-light);margin-bottom:10px;line-height:1.6;">
+            💡 <strong>請求対象</strong>: チェックを外すと、その日はクライアントへの請求対象外になります。<br>
+            🔗 <strong>補填ペア</strong>: 補填ペアの相方を指定すると、その日は<strong>請求上0日カウント</strong>（ペアの片方だけ1日計上）になります。
+          </p>
+          <div class="tableWrap">
+            <table>
+              <thead><tr>
+                <th>日付</th>
+                <th>担当者</th>
+                <th class="center">請求対象</th>
+                <th class="center">補填ペア相手</th>
+                <th>調整メモ</th>
+                <th class="center">請求カウント</th>
+              </tr></thead>
+              <tbody>
+                ${allDeliv.map(d => {
+                  const isBillable = d.dmm_billable !== false;
+                  const isPaired = !!d.dmm_pair_with;
+                  // 同担当者の他の日リスト
+                  const sameStaffOther = allDeliv.filter(o => 
+                    o.staffId === d.staffId && o.id !== d.id
+                  );
+                  const pairOptions = '<option value="">— なし —</option>' + 
+                    sameStaffOther.map(o => 
+                      `<option value="${o.id}" ${d.dmm_pair_with===o.id?'selected':''}>${o.date}</option>`
+                    ).join('');
+                  
+                  // 請求カウント表示
+                  let countLabel;
+                  if (!isBillable) {
+                    countLabel = '<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">請求外 (0日)</span>';
+                  } else if (isPaired) {
+                    countLabel = '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">🔗 ペア (0日)</span>';
+                  } else {
+                    countLabel = '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">✓ 1日</span>';
+                  }
+                  
+                  return `<tr${(!isBillable||isPaired)?' style="background:#f8fafc;"':''}>
+                    <td style="font-weight:600;">${d.date}</td>
+                    <td>${d._staff.emoji||'👤'} ${d._staff.name}</td>
+                    <td style="text-align:center;">
+                      <input type="checkbox" ${isBillable?'checked':''} 
+                        onchange="updateDmmBillable('${d.id}', this.checked)"
+                        style="width:18px;height:18px;cursor:pointer;">
+                    </td>
+                    <td style="text-align:center;">
+                      <select onchange="updateDmmPair('${d.id}', this.value)" style="padding:3px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;">
+                        ${pairOptions}
+                      </select>
+                    </td>
+                    <td>
+                      <input type="text" value="${d.dmm_note||''}" 
+                        onblur="updateDmmNote('${d.id}', this.value)"
+                        placeholder="例: 雨天キャンセル / 余分稼働" 
+                        style="width:100%;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;">
+                    </td>
+                    <td style="text-align:center;">${countLabel}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 12px;margin-top:10px;font-size:11px;color:#1e40af;">
+            <strong>📊 請求結果</strong>: 実稼働 ${allDeliv.length}日 → 請求対象 <strong>${result.workDays}日</strong>
+            ${allDeliv.length !== result.workDays ? `（${allDeliv.length - result.workDays}日が請求対象外/ペア扱い）` : ''}
+          </div>
+        </div>
+      `;
+    }
   }
   
   // 実費明細
