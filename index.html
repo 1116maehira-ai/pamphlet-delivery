@@ -530,6 +530,14 @@ input[type=file] { display:none; }
       <div>
         <div class="alert alert-warn" style="font-size:12px;">⚠️ 駐車場・高速料金の領収書は、作業終了報告時にアップしてください。</div>
       </div>
+      
+      <div class="formGroup" style="margin-top:16px;padding:12px 14px;background:#fef3c7;border:1px solid #fbbf24;border-radius:10px;">
+        <div class="formLabel" style="font-weight:700;color:#92400e;margin-bottom:8px;">📌 縦型スタンドポップ</div>
+        <div id="standPopArea" style="display:flex;flex-direction:column;gap:8px;">
+          <!-- JSで動的描画 -->
+        </div>
+      </div>
+      
       <div class="formGroup" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
         <label class="formLabel">補充状況</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
@@ -2329,11 +2337,11 @@ function renderFacilities() {
       <span class="badge badge-pending">未完了 ${facs.filter(f=>f.status==='pending').length}件</span>
       <span class="badge badge-skip">合計 ${facs.length}件</span>
     </div>
-    <div class="tableWrap"><table><thead><tr><th>No</th><th>施設名</th><th>エリア</th><th>ジャンル</th><th>住所</th><th>状況</th><th style="text-align:center;cursor:pointer;user-select:none;" onclick="toggleVisitSort()" title="クリックでソート">訪問回数 ${state.facilSort==='visit_asc'?'▲':state.facilSort==='visit_desc'?'▽':'⇅'}</th><th>操作</th></tr></thead>
+    <div class="tableWrap"><table><thead><tr><th>No</th><th>施設名</th><th>エリア</th><th>ジャンル</th><th>住所</th><th>状況</th><th style="text-align:center;cursor:pointer;user-select:none;" onclick="toggleVisitSort()" title="クリックでソート">訪問回数 ${state.facilSort==='visit_asc'?'▲':state.facilSort==='visit_desc'?'▽':'⇅'}</th>${state.currentUser.type==='admin'?'<th style="text-align:center;">ポップ</th>':''}<th>操作</th></tr></thead>
     <tbody>${facs.map((f,i) => `<tr>
       <td style="color:var(--slate-light);font-family:'DM Mono',monospace;">${i+1}</td>
       <td style="font-weight:600;">
-        ${f.name}
+        ${f.has_stand_pop ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid #fbbf24;margin-right:6px;">📌</span>' : ''}${f.name}
         ${(()=>{const m=getLatestNoteForFac(f.id);if(!m)return '';const bid='note-'+f.id;return `<div style="margin-top:4px;"><button onclick="(function(){const el=document.getElementById('${bid}');if(el)el.style.display=el.style.display==='none'?'block':'none';})()" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:#fef9c3;border:1px solid #fde047;font-size:11px;font-weight:600;color:#854d0e;cursor:pointer;">💬 現地注意点☝️</button><div id="${bid}" style="display:none;margin-top:6px;padding:8px 10px;background:#fffbeb;border:1px solid #fde047;border-radius:8px;font-size:12px;color:#78350f;line-height:1.6;">${m.note}<div style="margin-top:4px;font-size:10px;color:#a16207;">${m.date} · ${state.staff.find(s=>s.id===m.staffId)?.name||'担当者'}</div></div></div>`;})()}
       </td>
       <td><span class="badge badge-area${f.zone}">${AREA_NAMES[f.zone]||f.zone}</span></td>
@@ -2341,6 +2349,7 @@ function renderFacilities() {
       <td style="font-size:12px;color:var(--slate-mid);">${f.address||'-'}</td>
       <td>${f.status==='done'?'<span class="badge badge-done">完了</span>':f.status==='skip'?'<span class="badge badge-skip">不要</span>':'<span class="badge badge-pending">未完了</span>'}${f.lastDone?`<div style="font-size:10px;color:var(--slate-light);">${f.lastDone}</div>`:''}</td>
       <td style="text-align:center;"><div style="display:flex;flex-direction:column;align-items:center;gap:3px;"><span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:${(f.visitCount||0)===0?'#fee2e2':(f.visitCount||0)===1?'#fef3c7':(f.visitCount||0)>=3?'#dcfce7':'#e0f2fe'};color:${(f.visitCount||0)===0?'#b91c1c':(f.visitCount||0)===1?'#92400e':(f.visitCount||0)>=3?'#166534':'#0369a1'}">${f.visitCount||0}回</span>${makeElapsedBadge(getDaysSinceLastVisit(f), {compact:true})}</div></td>
+      ${state.currentUser.type==='admin' ? `<td style="text-align:center;">${f.has_stand_pop ? `<button class="btn btn-outline btn-sm" style="padding:3px 8px;font-size:10px;border-color:#fbbf24;color:#92400e;background:#fef3c7;" onclick="adminTogglePop('${f.id}', false)" title="撤去マークを取り消す">📌 あり<br><span style="font-size:8px;">タップで取消</span></button>` : `<button class="btn btn-outline btn-sm" style="padding:3px 8px;font-size:10px;color:#94a3b8;" onclick="adminTogglePop('${f.id}', true)" title="設置済みとしてマーク">なし<br><span style="font-size:8px;">タップで設置</span></button>`}</td>` : ''}
       <td><div style="display:flex;gap:4px;">
         ${state.currentUser.type==='admin' ? `
           <button class="btn btn-outline btn-sm" onclick="editFacility('${f.id}')">編集</button>
@@ -2367,6 +2376,35 @@ async function markFacility(id, status) {
   await updateFacilityStatus(id, status, lastDone);
   const f = state.facilities.find(f=>f.id===id);
   if (f) { f.status=status; f.lastDone=lastDone; }
+  renderFacilities();
+}
+
+// 管理者用: スタンドポップの設置/取消を切り替え
+async function adminTogglePop(facId, newValue) {
+  const f = state.facilities.find(f=>f.id===facId);
+  if (!f) return;
+  
+  const action = newValue ? '設置済み' : '取り消し（撤去マークまたは未設置）';
+  if (!confirm(`「${f.name}」のスタンドポップを「${action}」にしますか？`)) return;
+  
+  const updateData = newValue ? {
+    has_stand_pop: true,
+    pop_set_at: new Date().toISOString(),
+    pop_set_by: 'admin',
+    pop_removed_at: null,
+    pop_removed_by: null,
+  } : {
+    has_stand_pop: false,
+    pop_removed_at: new Date().toISOString(),
+    pop_removed_by: 'admin',
+  };
+  
+  const {error} = await sb.from('facilities').update(updateData).eq('id', facId);
+  if (error) {
+    alert('保存に失敗しました: ' + error.message);
+    return;
+  }
+  Object.assign(f, updateData);
   renderFacilities();
 }
 
@@ -2913,6 +2951,7 @@ function buildFacilityCard(f, todayReports) {
             ${isSkip ? '<span style="background:#94a3b8;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">⏭ 補充不要</span>' : ''}
             ${(()=>{const vc=f.visitCount||0;const bg=vc===0?'#fee2e2':vc===1?'#fef3c7':vc>=3?'#dcfce7':'#dbeafe';const col=vc===0?'#b91c1c':vc===1?'#92400e':vc>=3?'#166534':'#1e40af';return `<span style="background:${bg};color:${col};font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;">${vc===0?'🔴 未訪問':`🔵 ${vc}回訪問済`}</span>`})()}
             ${makeElapsedBadge(getDaysSinceLastVisit(f), {compact:true})}
+            ${f.has_stand_pop ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;border:1px solid #fbbf24;">📌 ポップあり</span>' : ''}
             ${f.name}
           </div>
           <div class="fcMeta">
@@ -3244,6 +3283,7 @@ function setDeliveryGenreFilter(genreId) {
 function openCheckIn(facId) {
   state.checkInFacId = facId;
   state.checkInStatus = null;
+  state.checkInPopAction = null;  // 'set' or 'removed' or null
   const f = state.facilities.find(f=>f.id===facId);
   document.getElementById('checkInTitle').textContent = `📝 ${f?.name||'施設'} 報告`;
   document.getElementById('checkInNote').value = '';
@@ -3254,7 +3294,55 @@ function openCheckIn(facId) {
   if (receiptPhotosEl) receiptPhotosEl.innerHTML = '';
   // パンフ種別UIを動的生成
   buildCheckInPamphUI({});
+  // スタンドポップエリアを描画
+  renderStandPopArea(f);
   openModal('checkInModal');
+}
+
+// スタンドポップエリアの描画
+function renderStandPopArea(facility) {
+  const area = document.getElementById('standPopArea');
+  if (!area || !facility) return;
+  const isAdmin = state.currentUser.type === 'admin';
+  const hasPop = facility.has_stand_pop === true;
+  
+  let html = '';
+  
+  if (!hasPop) {
+    // 現在: ポップなし → 「スタンドポップあり」をチェックできる
+    html = `
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;background:white;border-radius:6px;border:1px solid #fbbf24;">
+        <input type="checkbox" id="popSetCheckbox" ${state.checkInPopAction==='set'?'checked':''} 
+          onchange="state.checkInPopAction = this.checked ? 'set' : null"
+          style="width:18px;height:18px;cursor:pointer;">
+        <span style="font-size:13px;font-weight:600;color:#92400e;">📌 縦型スタンドポップあり</span>
+      </label>
+      <div style="font-size:11px;color:#92400e;line-height:1.6;">
+        💡 チェックすると、この施設にスタンドポップが設置されている記録が残ります。<br>
+        クライアント画面でも「📌 ポップあり」と表示されます。
+      </div>
+    `;
+  } else {
+    // 現在: ポップあり → 撤去ボタンを出す
+    const setAt = facility.pop_set_at ? new Date(facility.pop_set_at).toLocaleDateString('ja-JP') : '不明';
+    html = `
+      <div style="background:white;border-radius:6px;padding:8px 12px;border:2px solid #fbbf24;">
+        <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:4px;">📌 スタンドポップ設置中</div>
+        <div style="font-size:10px;color:#78350f;">設置記録日: ${setAt}</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;background:#fee2e2;border-radius:6px;border:1px solid #dc2626;">
+        <input type="checkbox" id="popRemoveCheckbox" ${state.checkInPopAction==='removed'?'checked':''} 
+          onchange="state.checkInPopAction = this.checked ? 'removed' : null"
+          style="width:18px;height:18px;cursor:pointer;">
+        <span style="font-size:13px;font-weight:600;color:#b91c1c;">🗑 スタンドポップを撤去した</span>
+      </label>
+      <div style="font-size:11px;color:#7f1d1d;line-height:1.6;">
+        💡 撤去・回収した場合のみチェックしてください。クライアント画面の「📌」表示も外れます。
+      </div>
+    `;
+  }
+  
+  area.innerHTML = html;
 }
 function togglePamph(btn) {
   const selected = btn.dataset.selected === '1';
@@ -3308,6 +3396,7 @@ async function saveCheckIn() {
     facility_contact: facilityContact,
     pamph_detail: JSON.stringify(pamphDetail),
     reported_at: reportedAt,
+    pop_marked: state.checkInPopAction || null,  // 'set' or 'removed' or null
   };
   // GPS座標をrepDataに追加
   if (repLat !== null) { repData.lat = repLat; repData.lng = repLng; }
@@ -3319,6 +3408,26 @@ async function saveCheckIn() {
   // Update facility status（完了・不要どちらも14日間除外）
   const lastDone = (state.checkInStatus==='done' || state.checkInStatus==='skip') ? state.today : null;
   await updateFacilityStatus(state.checkInFacId, state.checkInStatus, lastDone);
+  
+  // スタンドポップの状態を施設に反映
+  if (state.checkInPopAction === 'set') {
+    await sb.from('facilities').update({
+      has_stand_pop: true,
+      pop_set_at: new Date().toISOString(),
+      pop_set_by: state.currentUser.id,
+      pop_removed_at: null,
+      pop_removed_by: null,
+    }).eq('id', state.checkInFacId);
+    await addNotifDB(`📌 ${state.currentUser.name} が「${state.facilities.find(f=>f.id===state.checkInFacId)?.name||''}」にスタンドポップ設置を記録しました`, null);
+  } else if (state.checkInPopAction === 'removed') {
+    await sb.from('facilities').update({
+      has_stand_pop: false,
+      pop_removed_at: new Date().toISOString(),
+      pop_removed_by: state.currentUser.id,
+    }).eq('id', state.checkInFacId);
+    await addNotifDB(`🗑 ${state.currentUser.name} が「${state.facilities.find(f=>f.id===state.checkInFacId)?.name||''}」のスタンドポップ撤去を記録しました`, null);
+  }
+  
   // 施設完了通知を管理者へ送る
   const facName = state.facilities.find(f=>f.id===state.checkInFacId)?.name || state.checkInFacId;
   const pamphInfo = (() => { try { const d=JSON.parse(repData.pamph_detail||'{}'); const entries=Object.entries(d); return entries.length>0?entries.map(([k,v])=>`【${k}】${v}枚`).join(' '):''; } catch(e){return '';} })();
@@ -5971,7 +6080,7 @@ function buildReportTable(reports, genre) {
   const isAdmin = state.currentUser.type === 'admin';
   const filtered = reports.filter(r => { const f=state.facilities.find(f=>f.id===r.facId); return genre==='all'||f?.genre===genre; });
   if (!filtered.length) return '<p style="color:var(--slate-light);font-size:13px;padding:12px;">なし</p>';
-  return `<table><thead><tr><th>施設名</th><th>ジャンル</th><th>エリア</th><th>状況</th><th>報告時刻</th><th>GPS</th><th>パンフ</th><th>先方担当者</th><th>メモ</th><th>写真</th>${isAdmin?'<th>修正</th>':''}</tr></thead><tbody>${filtered.map(r=>{
+  return `<table><thead><tr><th>施設名</th><th>ジャンル</th><th>エリア</th><th>状況</th><th>報告時刻</th><th>GPS</th><th>パンフ</th><th class="center">📌ポップ</th><th>先方担当者</th><th>メモ</th><th>写真</th>${isAdmin?'<th>修正</th>':''}</tr></thead><tbody>${filtered.map(r=>{
     const f=state.facilities.find(f=>f.id===r.facId);
     const rackPhotos = (() => { try { return JSON.parse(r.rack_photos||'[]'); } catch(e){ return []; } })();
     const receiptPhotos = (() => { try { return JSON.parse(r.receipt_photos||'[]'); } catch(e){ return []; } })();
@@ -5983,11 +6092,24 @@ function buildReportTable(reports, genre) {
     const pamphEntries = Object.entries(pamphDetail);
     const pamphHtml = pamphEntries.length>0 ? pamphEntries.map(([k,v])=>`<span class="badge badge-skip" style="font-size:10px;">【${k}】${v}枚</span>`).join(' ') : (r.pamph_count ? `${r.pamph_count}枚` : '-');
     const editBtn = isAdmin ? `<td><button class="btn btn-outline btn-sm" onclick="openEditReport('${r.id}')">✏️ 修正</button></td>` : '';
+    
+    // ポップ表示
+    let popHtml = '';
+    if (r.pop_marked === 'set') {
+      popHtml = '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid #fbbf24;">📌 設置記録</span>';
+    } else if (r.pop_marked === 'removed') {
+      popHtml = '<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid #fca5a5;">🗑 撤去記録</span>';
+    } else if (f?.has_stand_pop) {
+      popHtml = '<span style="background:#fef9c3;color:#854d0e;font-size:9px;padding:2px 6px;border-radius:8px;">📌 設置中</span>';
+    } else {
+      popHtml = '<span style="color:#94a3b8;font-size:10px;">-</span>';
+    }
+    
     // GPS表示
     const gpsHtml = (r.lat && r.lng)
       ? `<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" style="display:inline-flex;align-items:center;gap:3px;color:var(--navy);font-size:11px;text-decoration:none;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#054c9c"/><circle cx="12" cy="9" r="2.5" fill="white"/></svg>地図で確認</a>`
       : '<span style="color:#94a3b8;font-size:11px;">未取得</span>';
-    return `<tr><td style="font-weight:600;">${f?.name||r.facId}</td><td style="font-size:12px;">${{hotel:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><rect x="3" y="6" width="18" height="14" rx="2" fill="#054c9c" opacity="0.7"/><rect x="7" y="3" width="3" height="6" rx="1.5" fill="#054c9c" opacity="0.5"/><rect x="14" y="3" width="3" height="6" rx="1.5" fill="#054c9c" opacity="0.5"/></svg>`,rental:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><rect x="1" y="9" width="22" height="11" rx="3" fill="#054c9c" opacity="0.7"/><path d="M5 9l2-5h10l2 5" fill="#054c9c" opacity="0.4"/><circle cx="7" cy="20" r="2" fill="white" stroke="#054c9c" stroke-width="1.2"/><circle cx="17" cy="20" r="2" fill="white" stroke="#054c9c" stroke-width="1.2"/></svg>`,michi:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><path d="M12 3C9 3 6 5.5 6 9c0 2.5 1.5 4.5 3.5 5.5L8 18h8l-1.5-3.5C16.5 13.5 18 11.5 18 9c0-3.5-3-6-6-6z" fill="#4aa876" opacity="0.8"/><rect x="11" y="18" width="2" height="4" rx="1" fill="#4aa876" opacity="0.6"/></svg>`}[f?.genre]||''}</td><td><span class="badge badge-area${f?.zone||'1'}">${AREA_NAMES[f?.zone]||''}</span></td><td><span class="badge ${r.status==='done'?'badge-done':r.status==='skip'?'badge-skip':'badge-pending'}">${r.status==='done'?'完了':r.status==='skip'?'不要':'未完了'}</span></td><td style="text-align:center;font-size:12px;white-space:nowrap;">${r.reported_at||'-'}</td><td style="text-align:center;">${gpsHtml}</td><td>${pamphHtml}</td><td style="font-size:12px;">${r.facility_contact||'-'}</td><td style="font-size:12px;color:var(--slate-mid);">${r.note||'-'}</td><td>${photoHtml}</td>${editBtn}</tr>`;
+    return `<tr><td style="font-weight:600;">${f?.has_stand_pop ? '<span style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 5px;border-radius:6px;border:1px solid #fbbf24;margin-right:4px;">📌</span>' : ''}${f?.name||r.facId}</td><td style="font-size:12px;">${{hotel:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><rect x="3" y="6" width="18" height="14" rx="2" fill="#054c9c" opacity="0.7"/><rect x="7" y="3" width="3" height="6" rx="1.5" fill="#054c9c" opacity="0.5"/><rect x="14" y="3" width="3" height="6" rx="1.5" fill="#054c9c" opacity="0.5"/></svg>`,rental:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><rect x="1" y="9" width="22" height="11" rx="3" fill="#054c9c" opacity="0.7"/><path d="M5 9l2-5h10l2 5" fill="#054c9c" opacity="0.4"/><circle cx="7" cy="20" r="2" fill="white" stroke="#054c9c" stroke-width="1.2"/><circle cx="17" cy="20" r="2" fill="white" stroke="#054c9c" stroke-width="1.2"/></svg>`,michi:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><path d="M12 3C9 3 6 5.5 6 9c0 2.5 1.5 4.5 3.5 5.5L8 18h8l-1.5-3.5C16.5 13.5 18 11.5 18 9c0-3.5-3-6-6-6z" fill="#4aa876" opacity="0.8"/><rect x="11" y="18" width="2" height="4" rx="1" fill="#4aa876" opacity="0.6"/></svg>`}[f?.genre]||''}</td><td><span class="badge badge-area${f?.zone||'1'}">${AREA_NAMES[f?.zone]||''}</span></td><td><span class="badge ${r.status==='done'?'badge-done':r.status==='skip'?'badge-skip':'badge-pending'}">${r.status==='done'?'完了':r.status==='skip'?'不要':'未完了'}</span></td><td style="text-align:center;font-size:12px;white-space:nowrap;">${r.reported_at||'-'}</td><td style="text-align:center;">${gpsHtml}</td><td>${pamphHtml}</td><td style="text-align:center;">${popHtml}</td><td style="font-size:12px;">${r.facility_contact||'-'}</td><td style="font-size:12px;color:var(--slate-mid);">${r.note||'-'}</td><td>${photoHtml}</td>${editBtn}</tr>`;
   }).join('')}</tbody></table>`;
 }
 // 管理者：報告編集

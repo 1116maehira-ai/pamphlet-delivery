@@ -178,6 +178,10 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
       <option value="month">今月</option>
       <option value="custom">期間指定...</option>
     </select>
+    <select id="popFilter" onchange="setPopFilter(this.value)">
+      <option value="all">📌 ポップ全部</option>
+      <option value="pop">📌 ポップあり施設のみ</option>
+    </select>
     <span id="customPeriodInputs" style="display:none;gap:6px;align-items:center;">
       <input type="date" id="periodStart" onchange="renderTable()" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
       <span style="font-size:11px;color:#94a3b8;">〜</span>
@@ -208,6 +212,7 @@ let currentTab = 'hotel';
 let currentZoneFilter = 'all';
 let currentSort = 'visit_asc';
 let currentPeriod = 'all';
+let currentPopFilter = 'all';  // 'all' | 'pop' (ポップあり施設のみ)
 
 // 14日経過チェック: 配布完了から2週間以上経った施設は表示上「未完了」に戻す
 // （DBは書き換えない、index.htmlと同じロジック）
@@ -299,6 +304,11 @@ function setZoneFilter(zone) {
 
 function setSort(sort) {
   currentSort = sort;
+  renderTable();
+}
+
+function setPopFilter(value) {
+  currentPopFilter = value;
   renderTable();
 }
 
@@ -544,6 +554,11 @@ function renderTable() {
     }
   }
   if (currentZoneFilter !== 'all') facs = facs.filter(f => String(f.zone) === currentZoneFilter);
+  
+  // ポップフィルター
+  if (currentPopFilter === 'pop') {
+    facs = facs.filter(f => f.has_stand_pop === true);
+  }
 
   // 期間フィルター（期間内に1回でも配布があった施設のみ表示）
   if (currentPeriod !== 'all') {
@@ -756,7 +771,7 @@ function renderTable() {
     html += `<tr class="${isPositive ? 'done-row' : ''}">
       <td style="color:#94a3b8;font-family:monospace;">${rowNum}</td>
       <td style="white-space:nowrap;">${f.area1 || ''}${f.area2 ? '<br><span style="color:#94a3b8;font-size:10px;">'+f.area2+'</span>' : ''}</td>
-      <td style="font-weight:600;">${f.name}</td>
+      <td style="font-weight:600;">${f.has_stand_pop ? '<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid #fbbf24;margin-right:6px;" title="縦型スタンドポップ設置中">📌 ポップ</span>' : ''}${f.name}</td>
       <td style="text-align:center;">${vcBadge}</td>
       <td style="text-align:center;">${alertBtn}</td>
       <td style="color:#475569;font-size:11px;">${f.address || '-'}</td>
