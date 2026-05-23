@@ -249,32 +249,57 @@ async function loadData() {
 }
 
 function updateStats() {
-  const total = allFacilities.length;
+  // 施設フィルター（エリア・ジャンル・ポップ）を適用
+  let filteredFacs = allFacilities;
+  if (currentTab !== 'all') filteredFacs = filteredFacs.filter(f => f.genre === currentTab);
+  if (currentZoneFilter !== 'all') filteredFacs = filteredFacs.filter(f => String(f.zone) === currentZoneFilter);
+  if (currentPopFilter === 'pop') filteredFacs = filteredFacs.filter(f => f.has_stand_pop === true);
+  
+  const total = filteredFacs.length;
   // 完了 = done + skip（補充不要も「対応済み」としてカウント）
-  const done = allFacilities.filter(f => f.status === 'done' || f.status === 'skip').length;
-  const pending = allFacilities.filter(f => f.status === 'pending').length;
+  const done = filteredFacs.filter(f => f.status === 'done' || f.status === 'skip').length;
+  const pending = filteredFacs.filter(f => f.status === 'pending').length;
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
-  const unvisited = allFacilities.filter(f => f.status !== 'skip' && (f.visit_count || 0) === 0).length;
+  const unvisited = filteredFacs.filter(f => f.status !== 'skip' && (f.visit_count || 0) === 0).length;
+  
+  // 該当施設のIDセット（reportsをフィルターするため）
+  const filteredFacIds = new Set(filteredFacs.map(f => f.id));
+  const filteredReports = allReports.filter(r => filteredFacIds.has(r.fac_id));
 
-  // 累計配布枚数: 全レポートの枚数合計
-  const totalPamph = allReports.reduce((sum, r) => sum + getReportPamphCount(r), 0);
+  // 累計配布枚数: 該当施設の全レポートの枚数合計
+  const totalPamph = filteredReports.reduce((sum, r) => sum + getReportPamphCount(r), 0);
 
-  // 期間内の配布枚数: 期間フィルターと連動
-  const periodPamph = allReports.reduce((sum, r) => {
+  // 期間内の配布枚数: 該当施設 × 期間フィルター
+  const periodPamph = filteredReports.reduce((sum, r) => {
     if (isReportInPeriod(r)) {
       return sum + getReportPamphCount(r);
     }
     return sum;
   }, 0);
 
-  // 期間ラベルを動的生成
+  // 期間ラベル + フィルタ条件を動的生成
   const periodLabels = {
-    'all': '📅 全期間の配布 ▼',
-    'today': '📅 今日の配布 ▼',
-    'week': '📅 今週の配布 ▼',
-    'month': '📅 今月の配布 ▼',
-    'custom': '📅 指定期間の配布 ▼',
+    'all': '📅 全期間',
+    'today': '📅 今日',
+    'week': '📅 今週',
+    'month': '📅 今月',
+    'custom': '📅 指定期間',
   };
+  
+  // 絞り込み条件表示
+  const filterParts = [];
+  if (currentTab !== 'all') {
+    const tabLabels = {hotel:'🏨ホテル', rental:'🚙レンタカー', michi:'⛩道の駅・観光地'};
+    filterParts.push(tabLabels[currentTab] || currentTab);
+  }
+  if (currentZoneFilter !== 'all') {
+    const zoneLabels = {'1':'エリア1:那覇', '2':'エリア2:南部', '3':'エリア3:中部', '4':'エリア4:北部・恩納', '5':'エリア5:名護・本部'};
+    filterParts.push(zoneLabels[currentZoneFilter] || `エリア${currentZoneFilter}`);
+  }
+  if (currentPopFilter === 'pop') filterParts.push('📌ポップあり');
+  
+  const filterLabel = filterParts.length > 0 ? `（${filterParts.join(' / ')}）` : '';
+  const periodLabel = (periodLabels[currentPeriod] || periodLabels['all']) + filterLabel + ' ▼';
 
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statDone').textContent = done;
@@ -285,7 +310,7 @@ function updateStats() {
   document.getElementById('statMonthPamph').textContent = periodPamph.toLocaleString();
   const monthLabelEl = document.getElementById('statMonthLabel');
   if (monthLabelEl) {
-    monthLabelEl.textContent = periodLabels[currentPeriod] || periodLabels['all'];
+    monthLabelEl.textContent = periodLabel;
   }
 }
 
@@ -294,11 +319,13 @@ function setTab(tab) {
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', ['hotel','rental','michi','all'][i] === tab);
   });
+  updateStats();
   renderTable();
 }
 
 function setZoneFilter(zone) {
   currentZoneFilter = zone;
+  updateStats();
   renderTable();
 }
 
@@ -309,6 +336,7 @@ function setSort(sort) {
 
 function setPopFilter(value) {
   currentPopFilter = value;
+  updateStats();
   renderTable();
 }
 
