@@ -183,9 +183,9 @@ tr.section-header td { background:#f1f5f9; font-weight:700; color:var(--slate-mi
       <option value="pop">📌 ポップあり施設のみ</option>
     </select>
     <span id="customPeriodInputs" style="display:none;gap:6px;align-items:center;">
-      <input type="date" id="periodStart" onchange="renderTable()" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
+      <input type="date" id="periodStart" onchange="onCustomPeriodChange()" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
       <span style="font-size:11px;color:#94a3b8;">〜</span>
-      <input type="date" id="periodEnd" onchange="renderTable()" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
+      <input type="date" id="periodEnd" onchange="onCustomPeriodChange()" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
     </span>
     <span class="badge-count" id="countBadge">-件</span>
   </div>
@@ -310,6 +310,17 @@ function setSort(sort) {
 function setPopFilter(value) {
   currentPopFilter = value;
   renderTable();
+}
+
+// カスタム期間の日付を変えた時に、すべての数字を再計算
+function onCustomPeriodChange() {
+  updateStats();
+  renderTable();
+  // 種別内訳パネルが開いてたら更新
+  const panel = document.getElementById('pamphBreakdownPanel');
+  if (panel && panel.style.display === 'block') {
+    togglePamphBreakdown(panel.dataset.scope);
+  }
 }
 
 function setPeriodFilter(period) {
