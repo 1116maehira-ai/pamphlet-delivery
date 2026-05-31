@@ -4619,15 +4619,31 @@ function calculateDmmInvoice(mode, ym, staffId, unitPrice) {
   const salesAmount = workDays * unitPrice;       // 販売金額（税抜）
   const salesTax = Math.round(salesAmount * 0.1); // 消費税
   const salesTotal = salesAmount + salesTax;       // 販売金額（税込）
-  const realCost = prevFuelCost + prevExpense;    // 実費（税なし）
-  const grandTotal = salesTotal + realCost;        // 合計請求額
+  
+  // 実費（税込価格から税抜＋消費税に分解）
+  // prevFuelCost / prevExpense は税込金額として扱う
+  // ※DMM指定: 税抜は切り上げ（Math.ceil）、消費税は税込との差額
+  const prevFuelNet = Math.ceil(prevFuelCost / 1.1);           // 燃料費（税抜）
+  const prevFuelTax = prevFuelCost - prevFuelNet;              // 燃料費の消費税
+  const prevExpenseNet = Math.ceil(prevExpense / 1.1);         // 諸経費（税抜）
+  const prevExpenseTax = prevExpense - prevExpenseNet;         // 諸経費の消費税
+  
+  const realCost = prevFuelCost + prevExpense;                 // 実費合計（税込）
+  const realCostNet = prevFuelNet + prevExpenseNet;            // 実費合計（税抜）
+  const realCostTax = prevFuelTax + prevExpenseTax;            // 実費合計の消費税
+  
+  const grandTotal = salesTotal + realCost;                    // 合計請求額（税込）
+  const totalTax = salesTax + realCostTax;                     // 消費税の合計
   
   return {
     mode, ym, m,
     workDays, workDaysBreakdown,
     salesAmount, salesTax, salesTotal,
-    prevFuelCost, prevExpense, prevTotalKm, prevExpenseList, realCost,
-    grandTotal,
+    prevFuelCost, prevFuelNet, prevFuelTax,
+    prevExpense, prevExpenseNet, prevExpenseTax,
+    prevTotalKm, prevExpenseList,
+    realCost, realCostNet, realCostTax,
+    grandTotal, totalTax,
     unitPrice,
     cur, prev,
   };
@@ -5159,18 +5175,26 @@ function renderDmmInvoice() {
         
         <!-- 実費部分 -->
         <div style="border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:12px;">
-          <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px;">◾ 実費（${result.m.prevYear}年${result.m.prevMonth}月分） <span style="font-size:10px;font-weight:500;color:#94a3b8;">（税なし）</span></div>
+          <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px;">◾ 実費（${result.m.prevYear}年${result.m.prevMonth}月分）</div>
           
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">
             <div style="font-size:12px;color:#475569;">燃料費 (${fmt(Math.round(result.prevTotalKm))}km分)</div>
-            <div style="font-size:14px;font-weight:600;color:#c2410c;">¥${fmt(result.prevFuelCost)}</div>
+            <div style="font-size:14px;font-weight:600;color:#c2410c;">¥${fmt(result.prevFuelNet)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;">
+            <div style="font-size:11px;color:#64748b;">消費税（10%）</div>
+            <div style="font-size:13px;font-weight:600;color:#c2410c;">¥${fmt(result.prevFuelTax)}</div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">
-            <div style="font-size:12px;color:#475569;">経費（駐車・高速など、${result.prevExpenseList.length}件）</div>
-            <div style="font-size:14px;font-weight:600;color:#7c3aed;">¥${fmt(result.prevExpense)}</div>
+            <div style="font-size:12px;color:#475569;">諸経費（駐車・高速など、${result.prevExpenseList.length}件）</div>
+            <div style="font-size:14px;font-weight:600;color:#7c3aed;">¥${fmt(result.prevExpenseNet)}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;">
+            <div style="font-size:11px;color:#64748b;">消費税（10%）</div>
+            <div style="font-size:13px;font-weight:600;color:#7c3aed;">¥${fmt(result.prevExpenseTax)}</div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;padding-left:14px;border-top:1px dashed #cbd5e1;">
-            <div style="font-size:12px;font-weight:600;color:#1e293b;">実費 小計</div>
+            <div style="font-size:12px;font-weight:600;color:#1e293b;">実費 小計（税込）</div>
             <div style="font-size:15px;font-weight:800;color:#7c3aed;">¥${fmt(result.realCost)}</div>
           </div>
         </div>
@@ -5180,7 +5204,7 @@ function renderDmmInvoice() {
           <div style="font-size:16px;font-weight:800;color:#0891b2;">💰 合計${modeLabel}金額</div>
           <div style="font-size:26px;font-weight:900;color:#dc2626;">¥${fmt(result.grandTotal)}</div>
         </div>
-        <div style="text-align:right;font-size:10px;color:#94a3b8;">（うち消費税 ¥${fmt(result.salesTax)}）</div>
+        <div style="text-align:right;font-size:10px;color:#94a3b8;">（うち消費税 ¥${fmt(result.totalTax)}）</div>
       </div>
       
       <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
@@ -5440,7 +5464,7 @@ function printDmmInvoice() {
   <div class="total-label">${state.dmmMode==='estimate'?'お見積もり金額':'ご請求金額'}（税込）</div>
   <div class="total-value">￥${fmt(result.grandTotal)}</div>
 </div>
-<div class="tax-note">うち消費税 ¥${fmt(result.salesTax)}</div>
+<div class="tax-note">うち消費税 ¥${fmt(result.totalTax)}</div>
 
 <h2>金額内訳</h2>
 <table class="summary-table">
@@ -5459,14 +5483,24 @@ function printDmmInvoice() {
       <td class="right">¥${fmt(result.salesTax)}</td>
     </tr>
     <tr>
-      <td><strong>燃料費</strong> <span style="font-size:9px;color:#94a3b8;">（税なし）</span></td>
+      <td><strong>燃料費</strong></td>
       <td class="center" style="font-size:10px;">${result.m.prevYear}年${result.m.prevMonth}月分 / ${fmt(Math.round(result.prevTotalKm))}km × ¥${state.fuelPrice||180}/L</td>
-      <td class="right">¥${fmt(result.prevFuelCost)}</td>
+      <td class="right">¥${fmt(result.prevFuelNet)}</td>
+    </tr>
+    <tr class="subtotal-row">
+      <td style="padding-left:24px;font-size:10px;">消費税（10%）</td>
+      <td class="center" style="font-size:10px;">燃料費に対する消費税</td>
+      <td class="right">¥${fmt(result.prevFuelTax)}</td>
     </tr>
     <tr>
-      <td><strong>諸経費</strong> <span style="font-size:9px;color:#94a3b8;">（税なし）</span></td>
+      <td><strong>諸経費</strong></td>
       <td class="center" style="font-size:10px;">${result.m.prevYear}年${result.m.prevMonth}月分 / 駐車・高速料金等 ${result.prevExpenseList.length}件</td>
-      <td class="right">¥${fmt(result.prevExpense)}</td>
+      <td class="right">¥${fmt(result.prevExpenseNet)}</td>
+    </tr>
+    <tr class="subtotal-row">
+      <td style="padding-left:24px;font-size:10px;">消費税（10%）</td>
+      <td class="center" style="font-size:10px;">諸経費に対する消費税</td>
+      <td class="right">¥${fmt(result.prevExpenseTax)}</td>
     </tr>
     <tr class="total-row">
       <td colspan="2" class="right">合 計</td>
