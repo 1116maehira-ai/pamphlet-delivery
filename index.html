@@ -5403,7 +5403,8 @@ function printDmmInvoice() {
   .from{flex:1;font-size:11px;line-height:1.7;color:#475569;border:1px solid #e2e8f0;padding:14px;border-radius:6px;background:#fafafa;}
   .from-label{font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:1px;margin-bottom:6px;}
   .from-name{font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
-  .from-stamp{display:inline-block;width:36px;height:36px;border:2px solid #dc2626;border-radius:50%;color:#dc2626;font-size:9px;text-align:center;line-height:32px;font-weight:700;flex-shrink:0;}
+  .from-stamp{display:inline-block;width:44px;height:44px;flex-shrink:0;}
+  .from-stamp img{width:100%;height:100%;object-fit:contain;}
   
   .subject{background:#f1f5f9;padding:10px 16px;border-radius:6px;margin-bottom:18px;font-size:13px;font-weight:600;}
   .greeting{font-size:13px;margin-bottom:18px;}
@@ -5412,6 +5413,15 @@ function printDmmInvoice() {
   .total-label{font-size:14px;font-weight:700;}
   .total-value{font-size:32px;font-weight:900;color:#0891b2;}
   .tax-note{font-size:10px;color:#64748b;text-align:right;margin-top:-18px;margin-bottom:18px;padding-right:24px;}
+  
+  .company-bank-info{background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:14px 18px;margin-bottom:24px;}
+  .company-bank-title{font-size:12px;font-weight:700;color:#92400e;margin-bottom:10px;}
+  .company-bank-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .company-bank-item{background:#fff;border:1px solid #fde68a;border-radius:4px;padding:10px 12px;}
+  .company-bank-bank{font-size:12px;font-weight:700;color:#78350f;margin-bottom:6px;border-bottom:1px dashed #fbbf24;padding-bottom:4px;}
+  .company-bank-row{display:flex;justify-content:space-between;font-size:11px;line-height:1.7;color:#78350f;}
+  .company-bank-label{color:#a16207;font-weight:600;}
+  .company-bank-value{font-weight:700;}
   
   h2{font-size:13px;border-bottom:2px solid #1e293b;padding-bottom:5px;margin-top:24px;margin-bottom:10px;}
   table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;}
@@ -5447,7 +5457,7 @@ function printDmmInvoice() {
   
   <div class="from">
     <div class="from-label">${state.dmmMode==='estimate'?'発行者':'請　求　元'}</div>
-    <div class="from-name">株式会社TENOHIRA<span class="from-stamp">印</span></div>
+    <div class="from-name">株式会社TENOHIRA<span class="from-stamp"><img src="tenohira_stamp.png" alt="印"></span></div>
     <div style="font-size:11px;color:#475569;margin-bottom:4px;">登録番号　T2360001026898</div>
     沖縄県<br>
     パンフレット配布管理<br>
@@ -5466,6 +5476,26 @@ function printDmmInvoice() {
   <div class="total-value">￥${fmt(result.grandTotal)}</div>
 </div>
 <div class="tax-note">うち消費税 ¥${fmt(result.totalTax)}</div>
+
+${state.dmmMode==='invoice' ? `
+<div class="company-bank-info">
+  <div class="company-bank-title">🏦 お振込先（下記いずれかの口座へお振込ください）</div>
+  <div class="company-bank-grid">
+    <div class="company-bank-item">
+      <div class="company-bank-bank">琉球銀行　読谷支店（普）</div>
+      <div class="company-bank-row"><span class="company-bank-label">店番</span><span class="company-bank-value">513</span></div>
+      <div class="company-bank-row"><span class="company-bank-label">口座番号</span><span class="company-bank-value">496877</span></div>
+      <div class="company-bank-row"><span class="company-bank-label">名義</span><span class="company-bank-value">株式会社TENOHIRA</span></div>
+    </div>
+    <div class="company-bank-item">
+      <div class="company-bank-bank">沖縄銀行　読谷支店（普）</div>
+      <div class="company-bank-row"><span class="company-bank-label">店番</span><span class="company-bank-value">319</span></div>
+      <div class="company-bank-row"><span class="company-bank-label">口座番号</span><span class="company-bank-value">1546673</span></div>
+      <div class="company-bank-row"><span class="company-bank-label">名義</span><span class="company-bank-value">株式会社TENOHIRA</span></div>
+    </div>
+  </div>
+</div>
+` : ''}
 
 <h2>金額内訳</h2>
 <table class="summary-table">
