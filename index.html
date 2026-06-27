@@ -3633,6 +3633,55 @@ function buildGoogleMapsUrl(facs, origin) {
 // ============================================================
 // REPORTS
 // ============================================================
+async function fetchReportDeliveries(startDate, endDate) {
+  // 指定期間のdeliveriesをDBから直接取得してstate.deliveriesにマージ
+  let q = sb.from('deliveries').select('*').order('date', {ascending: false});
+  if (startDate) q = q.gte('date', startDate);
+  if (endDate) q = q.lte('date', endDate);
+  const [delivRes, repRes] = await Promise.all([q, sb.from('reports').select('*')]);
+  if (!delivRes.data) return;
+  const fetched = delivRes.data.map(d => ({
+    ...d, staffId: d.staff_id, startKm: d.start_km, endKm: d.end_km,
+    startTime: d.start_time, endTime: d.end_time,
+    start_lat: d.start_lat, start_lng: d.start_lng,
+    meter_start_photos: d.meter_start_photos || '[]',
+    meter_end_photos: d.meter_end_photos || '[]',
+    toll_photos: d.toll_photos || '[]', reports: []
+  }));
+  if (repRes.data) repRes.data.forEach(r => {
+    const d = fetched.find(d => d.id === r.delivery_id);
+    if (d) d.reports.push({
+      facId: r.fac_id, status: r.status, note: r.note, id: r.id,
+      rack_photos: r.rack_photos || '[]', receipt_photos: r.receipt_photos || '[]',
+      pamph_types: r.pamph_types || '[]', pamph_count: r.pamph_count,
+      facility_contact: r.facility_contact, pamph_detail: r.pamph_detail || '{}',
+      reported_at: r.reported_at, lat: r.lat, lng: r.lng,
+    });
+  });
+  // 既存にないものだけマージ
+  const existingIds = new Set(state.deliveries.map(d => d.id));
+  fetched.forEach(d => { if (!existingIds.has(d.id)) state.deliveries.push(d); });
+}
+
+async function setReportPeriodAndFetch(period) {
+  state.reportPeriod = period;
+  // 全期間・過去データが必要な場合はDB再取得
+  if (period === 'all') {
+    await fetchReportDeliveries(null, null);
+  }
+  renderReports();
+}
+
+async function setReportCustomDateAndFetch() {
+  state.reportPeriod = 'custom';
+  const start = state.reportStartDate || null;
+  const end = state.reportEndDate || null;
+  if (start || end) {
+    await fetchReportDeliveries(start, end);
+  }
+  renderReports();
+}
+
 function renderReports() {
   const uid = state.currentUser.id;
   const isAdmin = state.currentUser.type === 'admin';
@@ -3737,15 +3786,15 @@ function renderReports() {
       <span style="font-size:12px;color:var(--slate-mid);font-weight:600;align-self:center;">期間:</span>
       ${periodOptions.map(p => {
         const isActive = state.reportPeriod === p.id;
-        return `<button onclick="state.reportPeriod='${p.id}';renderReports()" style="padding:5px 12px;border-radius:100px;border:1.5px solid ${isActive?'#033a78':'#dce8f8'};background:${isActive?'#054c9c':'white'};color:${isActive?'white':'#4a5568'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">${p.label}</button>`;
+        return `<button onclick="setReportPeriodAndFetch('${p.id}')" style="padding:5px 12px;border-radius:100px;border:1.5px solid ${isActive?'#033a78':'#dce8f8'};background:${isActive?'#054c9c':'white'};color:${isActive?'white':'#4a5568'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">${p.label}</button>`;
       }).join('')}
     </div>
     ${state.reportPeriod === 'custom' ? `
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <span style="font-size:12px;color:var(--slate-mid);">開始:</span>
-      <input type="date" value="${state.reportStartDate}" onchange="state.reportStartDate=this.value;renderReports()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;">
+      <input type="date" value="${state.reportStartDate}" onchange="state.reportStartDate=this.value;setReportCustomDateAndFetch()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;">
       <span style="font-size:12px;color:var(--slate-mid);">終了:</span>
-      <input type="date" value="${state.reportEndDate}" onchange="state.reportEndDate=this.value;renderReports()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;">
+      <input type="date" value="${state.reportEndDate}" onchange="state.reportEndDate=this.value;setReportCustomDateAndFetch()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;">
     </div>` : ''}
     ${isAdmin ? `
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
