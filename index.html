@@ -547,6 +547,29 @@ input[type=file] { display:none; }
         </div>
         <div id="statusSelected" style="margin-top:8px;font-size:13px;color:var(--slate-mid);">未選択</div>
       </div>
+
+      <div class="formGroup" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+        <label class="formLabel">🗂 設置タイプ <span style="color:#e87d4a;font-size:11px;">※補充完了時は必須</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn btn-outline btn-sm" id="placeTypeRack" onclick="setPlaceType('rack')">🗃 ラックへ設置</button>
+          <button class="btn btn-outline btn-sm" id="placeTypeStaff" onclick="setPlaceType('staff')">🙋 スタッフへ預け</button>
+        </div>
+        <div id="placeTypeSelected" style="margin-top:8px;font-size:13px;color:var(--slate-mid);">未選択</div>
+      </div>
+
+      <div class="formGroup" style="margin-top:16px;padding:12px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;">
+        <div class="formLabel" style="color:#0369a1;margin-bottom:8px;">📅 次回巡回のめど（任意）</div>
+        <div style="font-size:11px;color:#0369a1;margin-bottom:10px;">指定なし＝通常通り15日目から解放。3週間以上を指定するとその日まで除外。</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm next-visit-btn" data-weeks="0" onclick="setNextVisitWeeks(0)" style="font-size:12px;">指定なし</button>
+          <button class="btn btn-outline btn-sm next-visit-btn" data-weeks="3" onclick="setNextVisitWeeks(3)" style="font-size:12px;">3週間後</button>
+          <button class="btn btn-outline btn-sm next-visit-btn" data-weeks="4" onclick="setNextVisitWeeks(4)" style="font-size:12px;">4週間後</button>
+          <button class="btn btn-outline btn-sm next-visit-btn" data-weeks="6" onclick="setNextVisitWeeks(6)" style="font-size:12px;">6週間後</button>
+          <button class="btn btn-outline btn-sm next-visit-btn" data-weeks="8" onclick="setNextVisitWeeks(8)" style="font-size:12px;">8週間後</button>
+          <button class="btn btn-outline btn-sm next-visit-btn" data-weeks="12" onclick="setNextVisitWeeks(12)" style="font-size:12px;">12週間後</button>
+        </div>
+        <div id="nextVisitLabel" style="margin-top:8px;font-size:12px;color:#0369a1;"></div>
+      </div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('checkInModal')">キャンセル</button><button class="btn btn-primary" id="saveCheckInBtn" onclick="saveCheckIn()">報告を保存</button></div>
   </div>
@@ -3293,7 +3316,16 @@ async function startDelivery() {
     const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {timeout:8000, enableHighAccuracy:true}));
     startLat = pos.coords.latitude;
     startLng = pos.coords.longitude;
-  } catch(e) { console.log('GPS取得失敗（任意）:', e.message); }
+  } catch(e) {
+    console.log('GPS取得失敗（任意）:', e.message);
+    if (e.code === 1) {
+      const msg = document.createElement('div');
+      msg.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a2340;color:white;padding:12px 18px;border-radius:10px;font-size:13px;z-index:9999;max-width:320px;text-align:center;';
+      msg.innerHTML = '📍 GPS許可がOFFです<br><span style="font-size:11px;opacity:0.8;">設定 › Safari › 位置情報 を「確認」に変更してください</span>';
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 5000);
+    }
+  }
   const existing = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
   if (existing) {
     await sb.from('deliveries').update({started:true, start_km:startKm, start_time:startTime, meter_start_photos:JSON.stringify(meterStartUrls), start_lat:startLat, start_lng:startLng}).eq('id', existing.id);
@@ -3370,6 +3402,16 @@ function openCheckIn(facId) {
   document.getElementById('checkInNote').value = '';
   document.getElementById('facilityContact').value = '';
   document.getElementById('statusSelected').innerHTML = '未選択';
+  state.checkInPlaceType = null;
+  state.checkInNextVisitWeeks = 0;
+  const placeTypeSel = document.getElementById('placeTypeSelected');
+  if (placeTypeSel) placeTypeSel.innerHTML = '未選択';
+  const rackBtn = document.getElementById('placeTypeRack');
+  const staffBtn = document.getElementById('placeTypeStaff');
+  if (rackBtn) rackBtn.className = 'btn btn-outline btn-sm';
+  if (staffBtn) staffBtn.className = 'btn btn-outline btn-sm';
+  document.querySelectorAll('.next-visit-btn').forEach(b => { b.className = 'btn btn-outline btn-sm next-visit-btn'; b.style.fontSize='12px'; });
+  const nvl = document.getElementById('nextVisitLabel'); if (nvl) nvl.innerHTML = '';
   document.getElementById('rackPhotos').innerHTML = '';
   const receiptPhotosEl = document.getElementById('receiptPhotos');
   if (receiptPhotosEl) receiptPhotosEl.innerHTML = '';
@@ -3441,8 +3483,31 @@ function setCheckInStatus(s) {
   state.checkInStatus = s;
   document.getElementById('statusSelected').innerHTML = {done:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><circle cx="12" cy="12" r="10" fill="#4aa876" opacity="0.3"/><path d="M7 12l3.5 3.5L17 8" stroke="#2d6e50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 補充完了',skip:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><path d="M5 12h14M15 7l5 5-5 5" stroke="#4a5568" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 補充不要',pending:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><circle cx="12" cy="12" r="10" fill="#e87d4a" opacity="0.3"/><path d="M15 9l-6 6M9 9l6 6" stroke="#c0552a" stroke-width="2" stroke-linecap="round"/></svg> 未完了'}[s];
 }
+function setPlaceType(t) {
+  state.checkInPlaceType = t;
+  const rack = document.getElementById('placeTypeRack');
+  const staff = document.getElementById('placeTypeStaff');
+  if (rack) rack.className = t === 'rack' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+  if (staff) staff.className = t === 'staff' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+  const sel = document.getElementById('placeTypeSelected');
+  if (sel) sel.innerHTML = t === 'rack' ? '🗃 ラックへ設置' : '🙋 スタッフへ預け';
+}
+function setNextVisitWeeks(weeks) {
+  state.checkInNextVisitWeeks = weeks;
+  document.querySelectorAll('.next-visit-btn').forEach(b => {
+    b.className = parseInt(b.dataset.weeks) === weeks ? 'btn btn-primary btn-sm next-visit-btn' : 'btn btn-outline btn-sm next-visit-btn';
+    b.style.fontSize = '12px';
+  });
+  const label = document.getElementById('nextVisitLabel');
+  if (!label) return;
+  if (weeks === 0) { label.innerHTML = ''; return; }
+  const d = new Date();
+  d.setDate(d.getDate() + weeks * 7);
+  label.innerHTML = `→ ${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} まで除外されます`;
+}
 async function saveCheckIn() {
   if (!state.checkInStatus) { alert('補充状況を選択してください'); return; }
+  if (state.checkInStatus === 'done' && !state.checkInPlaceType) { alert('設置タイプを選択してください\n（ラックへ設置 or スタッフへ預け）'); return; }
   setBtn('saveCheckInBtn', true);
   const uid = state.currentUser.id;
   let delivery = state.deliveries.find(d=>d.staffId===uid && d.date===state.today);
@@ -3477,7 +3542,8 @@ async function saveCheckIn() {
     facility_contact: facilityContact,
     pamph_detail: JSON.stringify(pamphDetail),
     reported_at: reportedAt,
-    pop_marked: state.checkInPopAction || null,  // 'set' or 'removed' or null
+    pop_marked: state.checkInPopAction || null,
+    place_type: state.checkInPlaceType || null,
   };
   // GPS座標をrepDataに追加
   if (repLat !== null) { repData.lat = repLat; repData.lng = repLng; }
@@ -3488,7 +3554,13 @@ async function saveCheckIn() {
   }
   // Update facility status（完了・不要どちらも14日間除外）
   const lastDone = (state.checkInStatus==='done' || state.checkInStatus==='skip') ? state.today : null;
-  await updateFacilityStatus(state.checkInFacId, state.checkInStatus, lastDone);
+  let lastDoneOverride = lastDone;
+  if (lastDone && state.checkInNextVisitWeeks > 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + state.checkInNextVisitWeeks * 7 - 1);
+    lastDoneOverride = d.toISOString().split('T')[0];
+  }
+  await updateFacilityStatus(state.checkInFacId, state.checkInStatus, lastDoneOverride);
   
   // スタンドポップの状態を施設に反映
   if (state.checkInPopAction === 'set') {
@@ -3634,7 +3706,6 @@ function buildGoogleMapsUrl(facs, origin) {
 // REPORTS
 // ============================================================
 async function fetchReportDeliveries(startDate, endDate) {
-  // 指定期間のdeliveriesをDBから直接取得してstate.deliveriesにマージ
   let q = sb.from('deliveries').select('*').order('date', {ascending: false});
   if (startDate) q = q.gte('date', startDate);
   if (endDate) q = q.lte('date', endDate);
@@ -3658,30 +3729,21 @@ async function fetchReportDeliveries(startDate, endDate) {
       reported_at: r.reported_at, lat: r.lat, lng: r.lng,
     });
   });
-  // 既存にないものだけマージ
   const existingIds = new Set(state.deliveries.map(d => d.id));
   fetched.forEach(d => { if (!existingIds.has(d.id)) state.deliveries.push(d); });
 }
-
 async function setReportPeriodAndFetch(period) {
   state.reportPeriod = period;
-  // 全期間・過去データが必要な場合はDB再取得
-  if (period === 'all') {
-    await fetchReportDeliveries(null, null);
-  }
+  if (period === 'all') await fetchReportDeliveries(null, null);
   renderReports();
 }
-
 async function setReportCustomDateAndFetch() {
   state.reportPeriod = 'custom';
-  const start = state.reportStartDate || null;
-  const end = state.reportEndDate || null;
-  if (start || end) {
-    await fetchReportDeliveries(start, end);
+  if (state.reportStartDate || state.reportEndDate) {
+    await fetchReportDeliveries(state.reportStartDate || null, state.reportEndDate || null);
   }
   renderReports();
 }
-
 function renderReports() {
   const uid = state.currentUser.id;
   const isAdmin = state.currentUser.type === 'admin';
@@ -6095,8 +6157,7 @@ function printInvoice() {
   const startD = new Date(state.invoicePeriodStart);
   const monthLabel = `${startD.getFullYear()}年${startD.getMonth()+1}月分`;
   
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>請求書 ${staff.name} ${monthLabel}</title>
+  const htmlContent = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>請求書 ${staff.name} ${monthLabel}</title>
   <style>
     @page { size: A4; margin: 15mm; }
     body{font-family:'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif;color:#1e293b;max-width:900px;margin:0 auto;padding:30px;background:white;}
@@ -6267,8 +6328,13 @@ function printInvoice() {
   </div>
   
   <script>setTimeout(()=>window.print(), 500);<\/script>
-  </body></html>`);
-  win.document.close();
+  </body></html>`;
+  const blob = new Blob([htmlContent], {type: 'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 function buildReportTable(reports, genre) {
