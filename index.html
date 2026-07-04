@@ -1297,7 +1297,7 @@ async function loadAllData() {
       sb.from('facilities').select('id,name,genre,area1,area2,address,tel,rack,zone,status,last_done,visit_count').order('id'),
       sb.from('staff').select('*').order('name'),
       sb.from('schedules').select('*').order('date', {ascending:false}).limit(100),
-      sb.from('deliveries').select('*').gte('date', sinceStr).order('date', {ascending:false}),
+      sb.from('deliveries').select('*').order('date', {ascending:false}),
       sb.from('reports').select('id,delivery_id,fac_id,status,note,rack_photos,receipt_photos,pamph_types,pamph_count,facility_contact,pamph_detail,created_at,lat,lng,reported_at'),
       sb.from('notifications').select('*').order('created_at', {ascending:false}).limit(30),
       sb.from('availability').select('*'),
@@ -6634,7 +6634,7 @@ async function renderInventory() {
   const uid = state.currentUser.id;
 
   // 在庫データ取得（最新100件）
-  const { data: receives } = await sb.from('inventory_receives').select('*').order('received_at', {ascending: false}).limit(100);
+  const { data: receives } = await sb.from('inventory_receives').select('*').order('received_at', {ascending: false});
   const allReceives = receives || [];
   state._allReceives = allReceives; // 修正機能用にキャッシュ
 
