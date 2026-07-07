@@ -2339,6 +2339,22 @@ function isUnavailableFacility(name) {
   );
 }
 
+// ============================================================
+// 7月配布対象施設リスト（毎月BBDOリストに合わせて更新）
+// ============================================================
+const JULY_TARGET_IDS = new Set([
+  'h112','h113','h118','h119','h121','h124','h133','h134','h136','h139',
+  'h140','h141','h142','h114','h116','h117','h120','h122','h123','h126',
+  'h135','h137','h138','h153','h127','h132','h150','h152','h154','h158',
+  'h128','h131','h143','h145','h146','h147','h148','h149','h155','h156',
+  'h157','h159','h162','h163','h165','h129','h144','h161','h178','h181',
+  'h167','h172','h174','h184','h180','h171','h176','h182','h183','h185',
+  'h186','h187','h168','h169','h173','h177','h179','h188','h190','h191',
+  'r047','r048','r049','r052','r053','r055','r051','r054','r056','r050',
+  'r057','r058',
+]);
+function isJulyTarget(fid) { return JULY_TARGET_IDS.has(fid); }
+
 function renderFacilities() {
   const genres = [{id:'all',label:'すべて'},{id:'hotel',label:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><rect x="3" y="6" width="18" height="14" rx="2" fill="currentColor"/><rect x="7" y="3" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.6"/><rect x="14" y="3" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.6"/></svg> ホテル'},{id:'rental',label:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><rect x="1" y="9" width="22" height="11" rx="3" fill="currentColor"/><path d="M5 9l2-5h10l2 5" fill="currentColor" opacity="0.5"/><circle cx="7" cy="20" r="2" fill="white"/><circle cx="17" cy="20" r="2" fill="white"/></svg> レンタカー'},{id:'michi',label:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;"><path d="M12 3C9 3 6 5.5 6 9c0 2 1 3.5 3 5l3 3 3-3c2-1.5 3-3 3-5 0-3.5-3-6-6-6z" fill="currentColor" opacity="0.7"/><rect x="11" y="17" width="2" height="5" rx="1" fill="currentColor"/></svg> 道の駅・観光'},{id:'other',label:'その他'}];
   document.getElementById('genreTabs').innerHTML = genres.map(g =>
@@ -2383,6 +2399,13 @@ function renderFacilities() {
       return da - db;
     });
   }
+  // 7月対象を上に、対象外を下にソート
+  facs = [...facs].sort((a, b) => {
+    const aT = isJulyTarget(a.id) ? 0 : 1;
+    const bT = isJulyTarget(b.id) ? 0 : 1;
+    return aT - bT;
+  });
+
   const doneCount = facs.filter(f=>f.status==='done').length;
   
   // 配布不可施設の件数（全体から）
@@ -2414,10 +2437,10 @@ function renderFacilities() {
       ${state.currentUser.type==='admin'?'<th style="text-align:center;">ポップ</th>':''}
       <th>操作</th>
     </tr></thead>
-    <tbody>${facs.map((f,i) => `<tr>
+    <tbody>${facs.map((f,i) => `<tr style="${isJulyTarget(f.id)?'':'opacity:0.45;background:#f8fafc;'}">
       <td style="color:var(--slate-light);font-family:'DM Mono',monospace;">${i+1}</td>
       <td style="font-weight:600;">
-        ${f.has_stand_pop ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid #fbbf24;margin-right:6px;">📌</span>' : ''}${f.name}
+        ${isJulyTarget(f.id) ? '<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid #86efac;margin-right:4px;">🎯 7月</span>' : ''}${f.has_stand_pop ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid #fbbf24;margin-right:6px;">📌</span>' : ''}${f.name}
         ${(()=>{const m=getLatestNoteForFac(f.id);if(!m)return '';const bid='note-'+f.id;return `<div style="margin-top:4px;"><button onclick="(function(){const el=document.getElementById('${bid}');if(el)el.style.display=el.style.display==='none'?'block':'none';})()" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:#fef9c3;border:1px solid #fde047;font-size:11px;font-weight:600;color:#854d0e;cursor:pointer;">💬 現地注意点☝️</button><div id="${bid}" style="display:none;margin-top:6px;padding:8px 10px;background:#fffbeb;border:1px solid #fde047;border-radius:8px;font-size:12px;color:#78350f;line-height:1.6;">${m.note}<div style="margin-top:4px;font-size:10px;color:#a16207;">${m.date} · ${state.staff.find(s=>s.id===m.staffId)?.name||'担当者'}</div></div></div>`;})()}
       </td>
       <td><span class="badge badge-area${f.zone}">${AREA_NAMES[f.zone]||f.zone}</span></td>
