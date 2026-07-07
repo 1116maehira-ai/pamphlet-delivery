@@ -3056,6 +3056,7 @@ function buildFacilityCard(f, todayReports) {
       <div class="fcTop">
         <div style="flex:1;">
           <div class="fcName" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            ${isJulyTarget(f.id) ? '<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;border:1px solid #86efac;">🎯 7月</span>' : ''}
             ${isOffTarget ? '<span style="background:#94a3b8;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">⚫ 配布対象外</span>' : ''}
             ${isDone ? '<span style="background:#4aa876;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">✓ 配達済</span>' : ''}
             ${isSkip ? '<span style="background:#94a3b8;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">⏭ 補充不要</span>' : ''}
