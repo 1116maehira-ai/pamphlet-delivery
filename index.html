@@ -3676,7 +3676,8 @@ function renderReports() {
   
   // ===== 期間フィルター適用 =====
   const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const todayJST = new Date(today.getTime() + 9 * 60 * 60 * 1000);
+  const todayStr = todayJST.toISOString().slice(0, 10);
   const filterByPeriod = (d) => {
     if (state.reportPeriod === 'all') return true;
     if (state.reportPeriod === 'today') return d.date === todayStr;
