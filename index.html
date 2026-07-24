@@ -1298,7 +1298,7 @@ async function loadAllData() {
       sb.from('staff').select('*').order('name'),
       sb.from('schedules').select('*').order('date', {ascending:false}).limit(100),
       sb.from('deliveries').select('*').order('date', {ascending:false}),
-      sb.from('reports').select('id,delivery_id,fac_id,status,note,rack_photos,receipt_photos,pamph_types,pamph_count,facility_contact,pamph_detail,created_at,lat,lng,reported_at'),
+      sb.from('reports').select('id,delivery_id,fac_id,status,note,rack_photos,receipt_photos,pamph_types,pamph_count,facility_contact,pamph_detail,created_at,lat,lng,reported_at').limit(9999),
       sb.from('notifications').select('*').order('created_at', {ascending:false}).limit(30),
       sb.from('availability').select('*'),
       sb.from('pamph_types').select('*').order('sort_order'),
@@ -1562,7 +1562,7 @@ async function reloadSchedules() {
 async function reloadDeliveries() {
   const [delivRes, repRes] = await Promise.all([
     sb.from('deliveries').select('*').order('date',{ascending:false}),
-    sb.from('reports').select('*'),
+    sb.from('reports').select('*').limit(9999),
   ]);
   if (delivRes.data) {
     state.deliveries = delivRes.data.map(d => ({
