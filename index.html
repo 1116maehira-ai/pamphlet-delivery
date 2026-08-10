@@ -3217,9 +3217,9 @@ function renderDelivery() {
   // 隣接エリア取得
   const adjacentZones = activeZone ? (ADJACENT_ZONES[String(activeZone)] || []) : [];
   
-  // 現在のタブで表示する施設
+  // 現在のタブで表示する施設（8月対象施設のみ）
   const currentZoneFacs = state.facilities.filter(f => 
-    String(f.zone) === String(currentZone) && filterByGenre(f)
+    String(f.zone) === String(currentZone) && filterByGenre(f) && isJulyTarget(f.id)
   );
   
   // 隣接エリア全体に「21日以上経過」の施設があるか判定（線引きメッセージ用）
@@ -3227,6 +3227,7 @@ function renderDelivery() {
     state.facilities.some(f => 
       String(f.zone) === adjZ && 
       filterByGenre(f) && 
+      isJulyTarget(f.id) &&
       classifyFacility(f) === 'over21'
     )
   );
